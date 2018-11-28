@@ -1,0 +1,49 @@
+RandomForestClassifier(bootstrap=True, class_weight=None, criterion='gini',
+            max_depth=None, max_features='auto', max_leaf_nodes=None,
+            min_impurity_decrease=0.0, min_impurity_split=None,
+            min_samples_leaf=1, min_samples_split=2,
+            min_weight_fraction_leaf=0.0, n_estimators=5, n_jobs=None,
+            oob_score=False, random_state=42, verbose=0, warm_start=False)
+__main__:7: RuntimeWarning: divide by zero encountered in divide
+('Accuracy:', 82.43, '%.')
+RandomForestClassifier(bootstrap=True, class_weight=None, criterion='gini',
+            max_depth=None, max_features='auto', max_leaf_nodes=None,
+            min_impurity_decrease=0.0, min_impurity_split=None,
+            min_samples_leaf=1, min_samples_split=2,
+            min_weight_fraction_leaf=0.0, n_estimators=5, n_jobs=None,
+            oob_score=False, random_state=42, verbose=0, warm_start=False)
+('Accuracy:', 79.39, '%.')
+RandomForestClassifier(bootstrap=True, class_weight=None, criterion='gini',
+            max_depth=None, max_features='auto', max_leaf_nodes=None,
+            min_impurity_decrease=0.0, min_impurity_split=None,
+            min_samples_leaf=1, min_samples_split=2,
+            min_weight_fraction_leaf=0.0, n_estimators=5, n_jobs=None,
+            oob_score=False, random_state=42, verbose=0, warm_start=False)
+('Accuracy:', 83.39, '%.')
+RandomForestClassifier(bootstrap=True, class_weight=None, criterion='gini',
+            max_depth=None, max_features='auto', max_leaf_nodes=None,
+            min_impurity_decrease=0.0, min_impurity_split=None,
+            min_samples_leaf=1, min_samples_split=2,
+            min_weight_fraction_leaf=0.0, n_estimators=5, n_jobs=None,
+            oob_score=False, random_state=42, verbose=0, warm_start=False)
+('Accuracy:', 86.78, '%.')
+RandomForestClassifier(bootstrap=True, class_weight=None, criterion='gini',
+            max_depth=None, max_features='auto', max_leaf_nodes=None,
+            min_impurity_decrease=0.0, min_impurity_split=None,
+            min_samples_leaf=1, min_samples_split=2,
+            min_weight_fraction_leaf=0.0, n_estimators=5, n_jobs=None,
+            oob_score=False, random_state=42, verbose=0, warm_start=False)
+('Accuracy:', 84.07, '%.')
+
+
+GaussianNB(priors=None, var_smoothing=1e-09)
+('Accuracy:', 86.15, '%.')
+GaussianNB(priors=None, var_smoothing=1e-09)
+('Accuracy:', 89.53, '%.')
+GaussianNB(priors=None, var_smoothing=1e-09)
+('Accuracy:', 89.15, '%.')
+GaussianNB(priors=None, var_smoothing=1e-09)
+('Accuracy:', 88.81, '%.')
+GaussianNB(priors=None, var_smoothing=1e-09)
+('Accuracy:', 88.14, '%.')
+

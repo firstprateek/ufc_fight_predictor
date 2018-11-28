@@ -47,7 +47,8 @@ import pandas as pd
 import numpy as np
 
 # Read in data and display first 5 rows
-features = pd.read_csv('data_out3.csv')
+#features = pd.read_csv('data_out3.csv')
+pd.DataFrame(dataset, columns=headers)
 
 # Labels are the values we want to predict
 labels = np.array(features['winner'])
@@ -60,11 +61,39 @@ features = np.array(features)
 
 # Using Skicit-learn to split data into training and testing sets
 from sklearn.model_selection import train_test_split
-
-# Split the data into training and testing sets
-train_features, test_features, train_labels, test_labels = train_test_split(features, labels, test_size = 0.25, random_state = 42)
-
+from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import GaussianNB, BernoulliNB, MultinomialNB
+kf = KFold(n_splits=5)
+
+kf.get_n_splits(features)
+
+
+rf = RandomForestClassifier(n_estimators = 5, random_state = 42)
+for train_index, test_index in kf.split(features):
+  features_train, features_test = features[train_index], features[test_index]
+  labels_train, labels_test = labels[train_index], labels[test_index]
+  rf.fit(features_train, labels_train)
+  predictions = rf.predict(features_test)
+  errors = abs(predictions - labels_test)
+  mape = 100 * (errors / labels_test)
+  accuracy = 100 - np.mean(mape)
+  print('Accuracy:', round(accuracy, 2), '%.')
+# Split the data into training and testing sets
+#train_features, test_features, train_labels, test_labels = train_test_split(features, labels, test_size = 0.25, random_state = 42)
+
+gnb = GaussianNB()
+for train_index, test_index in kf.split(features):
+  features_train, features_test = features[train_index], features[test_index]
+  labels_train, labels_test = labels[train_index], labels[test_index]
+  gnb.fit(features_train, labels_train)
+  predictions = gnb.predict(features_test)
+  errors = abs(predictions - labels_test)
+  mape = 100 * (errors / labels_test)
+  accuracy = 100 - np.mean(mape)
+  print('Accuracy:', round(accuracy, 2), '%.')
+
+
 
 rf = RandomForestClassifier(n_estimators = 5, random_state = 42)
 
