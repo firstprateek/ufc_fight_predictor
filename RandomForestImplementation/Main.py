@@ -4,7 +4,7 @@ from Data import *
 
 def main():
     # generate path to data file
-    dir_path = os.getcwd().replace('Random Forest', 'data.csv')
+    dir_path = os.getcwd().replace('RandomForestImplementation', 'data.csv')
 
     data = Data()
     # using csv library to read the data file

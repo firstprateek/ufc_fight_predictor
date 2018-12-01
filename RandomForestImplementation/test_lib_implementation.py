@@ -69,7 +69,7 @@ kf = KFold(n_splits=5)
 kf.get_n_splits(features)
 
 
-rf = RandomForestClassifier(n_estimators = 5, random_state = 42)
+rf = RandomForestClassifier(n_estimators = 1000, random_state = 42)
 for train_index, test_index in kf.split(features):
   features_train, features_test = features[train_index], features[test_index]
   labels_train, labels_test = labels[train_index], labels[test_index]
