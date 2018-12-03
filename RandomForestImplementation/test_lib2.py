@@ -55,8 +55,9 @@ time_n_trees = []
 multiplier = (len(dataset[0]) - 1) / 10
 m_array = [ multiplier * i for i in range(2, 11) ]
 # m_array.insert(0, int(sqrt(len(dataset[0])-1)))
+n_features = int(sqrt(len(dataset[0])-1))
 
-for n_features in m_array:
+for n_trees in [1,2,3,4,5,6,7,8,9,10]:
   # rf = RandomForestClassifier(max_features=n_features, n_estimators = 62, random_state = 42)
   start = time.time()
   fold_accuracy = []
@@ -68,7 +69,7 @@ for n_features in m_array:
     test_set = np.c_[features_test, labels_test]
 
 
-    predictions = RandomForest(train_set.tolist(), test_set.tolist(), 10, 1, 1.0, 5, n_features).run()
+    predictions = RandomForest(train_set.tolist(), test_set.tolist(), 10, 1, 1.0, n_trees, n_features).run()
 
     # rf.fit(features_train, labels_train)
     
@@ -78,7 +79,7 @@ for n_features in m_array:
     accuracy = 100 - np.mean(mape)
     fold_accuracy.append(accuracy)
 
-  print('accuracy {}'.format(sum(fold_accuracy) / float(len(fold_accuracy))))
+  print('n_trees: {}, accuracy: {}'.format(n_trees, sum(fold_accuracy) / float(len(fold_accuracy))))
   accuracy_n_trres.append(sum(fold_accuracy) / float(len(fold_accuracy)))
   time_n_trees.append(time.time() - start)
 

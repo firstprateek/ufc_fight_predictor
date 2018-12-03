@@ -11,12 +11,8 @@ class DecisionTree:
 
   # Build a decision tree
   def build(self):
-    print('starting to build decision tree')
     root = self.get_split(self.train_set, self.n_features)
-    print('found best split')
     self.split(root, self.max_depth, self.min_size, self.n_features, 1)
-    print('--------------DONE-------------')
-    print('')
     return root  
 
   # Split a dataset based on an attribute and an attribute value

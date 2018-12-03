@@ -4,6 +4,8 @@ from random import randrange
 from random import seed
 from RandomForest import RandomForest
 from CrossValidation import cross_validate
+import time
+from sklearn.ensemble import RandomForestClassifier
 
 def load_csv(filename):
   dataset = []
@@ -43,9 +45,19 @@ n_folds = 5
 max_depth = 10
 min_size = 1
 sample_size = 1.0
-n_features = int(sqrt(len(dataset[0])-1))
-for n_trees in [1, 5, 10]:
-  scores = cross_validate(dataset, RandomForest, n_folds, max_depth, min_size, sample_size, n_trees, n_features)
-  print('Trees: %d' % n_trees)
+# n_features = int(sqrt(len(dataset[0])-1))
+start = time.time()
+
+multiplier = (len(dataset[0]) - 1) / 10
+m_array = [ multiplier * i for i in range(1, 11) ]
+m_array.insert(0, int(sqrt(len(dataset[0])-1)))
+
+for n_features in m_array:
+  rf = RandomForestClassifier(max_features=n_features, max_depth=10, n_estimators = 5, random_state = 42)
+  n_trees = 5
+  scores = cross_validate(dataset, rf, n_folds, max_depth, min_size, sample_size, n_trees, n_features)
+  print('n_features: %d' % n_features)
   print('Scores: %s' % scores)
   print('Mean Accuracy: %.3f%%' % (sum(scores)/float(len(scores))))
+  print('Time taken: {}'.format(time.time() - start))
+

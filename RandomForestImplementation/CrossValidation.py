@@ -1,6 +1,8 @@
 from random import randrange
 from random import seed
 
+import numpy as np
+
 # Divide data into k folds
 def cross_validation_split(dataset, n_folds):
   dataset_split, dataset_copy, fold_size = [], list(dataset), int(len(dataset) / n_folds)
@@ -29,10 +31,21 @@ def cross_validate(dataset, algorithm, n_folds, *args):
     for row in fold:
       row_copy = list(row)
       test_set.append(row_copy)
+    
+    train_features, test_features = np.array(train_set), np.array(test_set)
+    train_labels, test_labels = train_features[:,-1], test_features[:,-1]
+    np.delete(train_features, -1, axis=1)
+    np.delete(test_features, -1, axis=1)
 
-    predicted = algorithm(train_set, test_set, *args).run()
+    algorithm.fit(train_features, train_labels)
+    # predicted = algorithm(train_set, test_set, *args).run()
 
-    actual = [row[-1] for row in fold]
-    accuracy = accuracy_metric(actual, predicted)
+    predictions = algorithm.predict(test_features)
+    errors = abs(predictions - test_labels)
+    mape = 100 * (errors / test_labels)
+    accuracy = 100 - np.mean(mape)
+
+    # actual = [row[-1] for row in fold]
+    # accuracy = accuracy_metric(actual, predicted)
     scores.append(accuracy)
   return scores

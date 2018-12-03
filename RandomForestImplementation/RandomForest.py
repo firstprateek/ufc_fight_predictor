@@ -16,7 +16,6 @@ class RandomForest:
   def run(self):
     decision_trees = []
     for i in range(self.n_trees):
-      print('decision tree number: {}'.format(i))
       sample = self.subsample(self.train_set, self.sample_size)
       
       decision_tree = DecisionTree(sample, self.max_depth, self.min_size, self.n_features).build()
