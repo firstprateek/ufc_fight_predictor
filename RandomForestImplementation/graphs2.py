@@ -64,9 +64,9 @@ ax  = fig.add_subplot(111)
 plt.xlabel('Number of trees in random forrest')
 plt.ylabel('Accuracy (out of 100%)')
 plt.xticks(x_axis)
-ax.plot(x_axis, y1, dashes=[6, 2], c='r', label='Random Forest (scratch)', linewidth=2.1)
-ax.plot(x_axis, y2, c='b',dashes=[1, 0.5], label='Random Forest (sklearn)', linewidth=2.1)
-ax.plot(x_axis, y3, c='y', label='Naive Bayes (sklearn)', linewidth=2.1)
+ax.plot(x_axis, y1, c='r', label='Random Forest (scratch)', linewidth=2.1)
+ax.plot(x_axis, y2, c='b', dashes=[2, 1], label='Random Forest (sklearn)', linewidth=2.1)
+ax.plot(x_axis, y3, marker='x', c='y', label='Naive Bayes (sklearn)', linewidth=2.1)
 plt.title('Accuracy comparison for different number of trees')
 leg = plt.legend()
 plt.show()
@@ -115,31 +115,30 @@ for i in range(len(model_time) - 1, 0, -1):
   model_time[i] -= model_time[i-1]
 '''
 
-# model_time = [
-#   56.9795119762,
-#   179.3745090958,
-#   166.777905941,
-#   216.278252125,
-#   270.854514837,
-#   317.38113403500006,
-#   418.37991308999995, 
-#   440.0796740100002,
-#   527.500324011,
-#   556.592416049
-# ]
-
 model_time = [
-  70.27506399154663,
-  59.70460319519043,
-  51.07229781150818,
-  57.82169508934021,
-  59.76125478744507,
-  58.92223405838013,
-  62.738763093948364,
-  58.803088903427124,
-  60.05679702758789,
-  57.83321213722229
+  56.9795119762,
+  179.3745090958,
+  166.777905941,
+  216.278252125,
+  270.854514837,
+  317.38113403500006,
+  418.37991308999995, 
+  440.0796740100002,
+  527.500324011,
+  556.592416049
 ]
+# model_time = [
+#   70.27506399154663,
+#   59.70460319519043,
+#   51.07229781150818,
+#   57.82169508934021,
+#   59.76125478744507,
+#   58.92223405838013,
+#   62.738763093948364,
+#   58.803088903427124,
+#   60.05679702758789,
+#   57.83321213722229
+# ]
 rf_time = [
   0.0406489372253,
   0.0613520145417,
@@ -176,9 +175,9 @@ plt.xticks(x_axis)
 # ax.plot(x_axis, y1, c='r', label='Random Forest (Scratch)', linewidth=2.0)
 # ax.plot(x_axis, y2, c='b', label='Random Forest (sklearn)', linewidth=2.0)
 # ax.plot(x_axis, y3, c='y', label='Naive Bayes (sklearn)', linewidth=2.0)
-ax.plot(x_axis, y1, dashes=[6, 2], c='r', label='Random Forest (scratch)', linewidth=2.1)
-ax.plot(x_axis, y2, c='b', dashes=[1, 0.5], label='Random Forest (sklearn)', linewidth=2.1)
-ax.plot(x_axis, y3, c='y', label='Naive Bayes (sklearn)', linewidth=2.1)
+ax.plot(x_axis, y1, c='r', label='Random Forest (scratch)', linewidth=2.1)
+ax.plot(x_axis, y2, c='b', marker='o', markersize= 8, label='Random Forest (sklearn)', linewidth=1.2)
+ax.plot(x_axis, y3, marker='x', c='y', markersize= 12, label='Naive Bayes (sklearn)', linewidth=1.2)
 plt.title('Execution time comparison for different number of trees')
 leg = plt.legend()
 plt.show()
@@ -198,14 +197,57 @@ plt.xlabel('Number of trees in random forrest')
 plt.ylabel('Memory (in MB)')
 plt.xticks(x_axis)
 ax.plot(x_axis, y1, c='r', label='Random Forest (Scratch)', linewidth=2.0)
-ax.plot(x_axis, y2, c='b', label='Random Forest (sklearn)', linewidth=2.0)
-ax.plot(x_axis, y3, c='y', label='Naive Bayes (sklearn)', linewidth=2.0)
+ax.plot(x_axis, y2, c='b', marker='o', label='Random Forest (sklearn)', linewidth=2.0)
+ax.plot(x_axis, y3, c='y', marker='x', label='Naive Bayes (sklearn)', linewidth=2.0)
 plt.title('Memory consumption comparison for different number of trees')
 leg = plt.legend()
 plt.show()
 
+## memory for 100 trees
+
+model_memory = [87.123, 89.826, 90.5, 90.5, 90.5, 90.5, 90.5, 90.5, 91, 91] + [91] * 5
+rf_memory = [4.65, 10.917, 22.069, 28.71, 34.71, 46.75, 51.83, 58.03, 65.67, 75.45]+[87.23, 91.34, 100.42, 109.56, 118.523]
+# nb_memory = [2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8, 2.8]
+y1 = model_memory
+y2 = rf_memory
+# y3 = nb_memory
+x_axis = [n_tree for n_tree in range(1, 16)] 
+fig = plt.figure()
+ax  = fig.add_subplot(111)
+plt.xlabel('Number of trees in random forrest')
+plt.ylabel('Memory (in MB)')
+plt.xticks(x_axis)
+ax.plot(x_axis, y1, c='r', dashes=[6,2], label='Random Forest (Scratch)', linewidth=2.0)
+ax.plot(x_axis, y2, c='b', label='Random Forest (sklearn)', linewidth=2.0)
+# ax.plot(x_axis, y3, c='y', marker='x', label='Naive Bayes (sklearn)', linewidth=2.0)
+plt.title('Memory consumption comparison between RFsk and RFscratch')
+leg = plt.legend()
+plt.show()
+
+# rf_memory = [0.195312, 0.195312, 0.195312, 0.195312, 0.195312, 18.503906, 43.570312, 52.921875, 57.863281, 65.949219, 79.878906, 86.003906, 86.34375, 86.671875, 86.792969, 87.066406, 87.195312, 87.332031, 87.46875, 87.605469, 87.613281, 87.886719, 88.0, 88.367188, 88.511719, 88.777344, 88.800781, 89.023438, 89.144531, 89.28125, 89.664062, 89.671875, 89.78125, 89.824219, 89.941406, 90.523438, 90.585938, 90.816406, 91.128906, 91.128906, 91.128906, 91.234375, 91.234375, 91.335938, 91.402344, 91.65625, 91.980469, 92.386719, 92.4375, 92.4375, 92.441406, 92.441406, 92.453125, 92.453125, 92.621094, 92.757812, 93.15625, 93.75, 93.785156, 94.09375, 94.09375, 94.09375, 94.09375, 94.355469, 94.601562, 94.601562, 94.617188, 94.871094, 95.535156, 95.535156, 95.707031, 95.710938, 95.710938, 95.722656, 95.992188, 96.703125, 96.714844, 96.714844, 97.183594, 97.207031, 97.226562, 97.226562, 97.226562, 97.609375, 97.609375, 97.613281, 98.335938, 98.335938, 98.820312, 98.824219, 99.5625, 99.746094, 99.746094, 100.148438, 100.148438, 100.15625, 100.164062, 100.167969, 100.171875, 100.171875]
+# model_memory = [87.123, 89.826, 90.5, 90.5, 90.5, 90.5, 90.5, 90.5, 91, 91] + [91] * 90
+# y1 = model_memory
+# y2 = rf_memory
+# x_axis = [n_tree for n_tree in range(1, 101)] 
+# fig = plt.figure()
+# ax  = fig.add_subplot(111)
+# plt.xticks([i for i in range(0, 101, 10)])
+# plt.xlabel('Number of trees in random forrest')
+# plt.ylabel('Memory (in MB)')
+# plt.xticks(x_axis)
+# ax.plot(x_axis, y1, c='r', label='Random Forest (Scratch)', linewidth=2.0)
+# ax.plot(x_axis, y2, c='b', label='Random Forest (sklearn)', linewidth=2.0)
+# plt.title('Memory consumption comparison between RFsk and RFscratch')
+# leg = plt.legend()
+# plt.show()
+
+
 # Plot of sk learn rf till 100 trees
 ## accuracy
+# ax.plot(x_axis, y1, c='r', label='Random Forest (scratch)', linewidth=2.1)
+# ax.plot(x_axis, y2, c='b', dashes=[1, 0.5], label='Random Forest (sklearn)', linewidth=2.1)
+# ax.plot(x_axis, y3, dashes=[6, 2], c='y', label='Naive Bayes (sklearn)', linewidth=2.1)
+
 rf_accuracy = [80.2313330279432, 69.4665597801191, 82.060238204306, 75.35799358680715, 83.21232249198351, 77.45762711864407, 82.60352725606963, 79.28515803939533, 82.87402656894183, 80.23362345396244, 83.07672927164451, 81.38387540082456, 84.36211635364177, 82.33256985799359, 85.44617498854787, 83.34722858451671, 85.91937700412277, 83.48167659184608, 86.12276683463125, 83.61795693999083, 85.9876316994961, 84.70064131928538, 86.39418231791113, 85.04031149793862, 85.98786074209804, 85.58085203847915, 86.59711406321576, 86.1225377920293, 86.52931745304627, 85.58131012368301, 86.59711406321576, 85.91937700412277, 86.46106275767292, 86.1903344021988, 86.39303710490151, 86.39257901969765, 86.86738433348602, 86.66307833256985, 86.8662391204764, 86.93449381584975, 87.54374713696748, 87.40815391662849, 87.61108566193312, 87.7466788822721, 87.74644983967018, 87.06962895098488, 87.61154374713696, 87.47480531378837, 87.8815849748053, 87.4072377462208, 88.35547411818598, 87.88204306000917, 88.35570316078791, 87.94892349977097, 88.01672010994045, 87.54260192395785, 87.9491525423729, 87.88135593220338, 88.01649106733854, 88.08428767750802, 88.01694915254237, 88.49083829592306, 89.03183692166743, 88.62551534585432, 88.96426935409987, 88.69354099862574, 88.89715987173614, 88.55840586349062, 88.762024736601, 88.69377004122768, 88.89647274393037, 88.96404031149794, 88.96404031149794, 88.89647274393037, 89.16674301420065, 89.16651397159872, 89.64063215758132, 89.0322950068713, 89.57306459001374, 89.23499770957399, 89.37013284470912, 89.09940448923501, 89.57283554741183, 89.37059092991296, 89.97938616582684, 89.64109024278517, 89.7762253779203, 89.84402198808979, 89.84356390288593, 89.64177737059093, 89.9120476408612, 89.43884562528629, 90.11497938616583, 90.45350435180944, 90.38570774163995, 90.25080164910673, 90.45373339441137, 90.11543747136969, 90.0478699038021, 89.77645442052221]
 x_axis = [i for i in range(1,101)]
 y1 = rf_accuracy
@@ -215,7 +257,7 @@ ax  = fig.add_subplot(111)
 plt.xticks([i for i in range(0, 101, 10)])
 plt.xlabel('Number of trees in random forrest')
 plt.ylabel('Accuracy (out of 100%)')
-ax.plot(x_axis, y2, c='y', label='Naive Bayes (sklearn)', linewidth=2.0)
+ax.plot(x_axis, y2, marker='x', markevery=5, c='y', label='Naive Bayes (sklearn)', linewidth=1.0)
 ax.plot(x_axis, y1, c='b', label='Random Forest (sklearn)', linewidth=2.0)
 plt.title('Accuracy of sklearn Random Forest over 100 trees')
 leg = plt.legend()
@@ -261,8 +303,8 @@ plt.xlabel('Percentage of features selected for finding best split')
 plt.ylabel('Accuracy (out of 100%)')
 plt.xticks(x_axis)
 ax.plot(x_axis, y1, c='r', label='Random Forest (Scratch)', linewidth=2.0)
-ax.plot(x_axis, y2, c='b', label='Random Forest (sklearn)', linewidth=2.0)
-ax.plot(x_axis, y3, c='y', label='Naive Bayes (sklearn)', linewidth=2.0)
+ax.plot(x_axis, y2, c='b', dashes=[2, 1], label='Random Forest (sklearn)', linewidth=2.0)
+ax.plot(x_axis, y3, c='y', marker='x', label='Naive Bayes (sklearn)', linewidth=2.0)
 plt.title('Accuracy comparison for different feature size selection')
 leg = plt.legend()
 plt.show()
@@ -277,7 +319,12 @@ model_time = [ 294.744634151, 580.577069044, 1155.38375616, 2025.09003615, 3207.
 for i in range(len(model_time) - 1, 0, -1):
   model_time[i] -= model_time[i-1]
 
+
+ax.plot(x_axis, y2, c='b', marker='o', markersize= 8, label='Random Forest (sklearn)', linewidth=1.2)
+ax.plot(x_axis, y3, marker='x', c='y', markersize= 12, label='Naive Bayes (sklearn)', linewidth=1.2)
 '''
+
+
 ## time
 rf_time = [0.1329648494720459, 0.19945693016052246, 0.29729199409484863, 0.3407740592956543, 0.40734314918518066, 0.4634699821472168, 0.5375540256500244, 0.6107227802276611, 0.6747231483459473, 4.56828498840332]
 nb_time = [0.0406489372253] * 10
@@ -292,8 +339,8 @@ plt.xlabel('Percentage of features selected for finding best split')
 plt.ylabel('Time (in seconds)')
 plt.xticks(x_axis)
 ax.plot(x_axis, y1, c='r', label='Random Forest (Scratch)', linewidth=2.0)
-ax.plot(x_axis, y2, c='b', label='Random Forest (sklearn)', linewidth=2.0)
-ax.plot(x_axis, y3, c='y', label='Naive Bayes (sklearn)', linewidth=2.0)
+ax.plot(x_axis, y2, c='b', marker='o', markersize= 8, label='Random Forest (sklearn)', linewidth=1.2)
+ax.plot(x_axis, y3, marker='x', c='y', markersize= 12, label='Naive Bayes (sklearn)', linewidth=1.2)
 plt.title('Execution time comparison for different feature size selection')
 leg = plt.legend()
 plt.show()
@@ -313,8 +360,8 @@ plt.xlabel('Percentage of features selected for finding best split')
 plt.ylabel('Memory (in MBs)')
 plt.xticks(x_axis)
 ax.plot(x_axis, y1, c='r', label='Random Forest (Scratch)', linewidth=2.0)
-ax.plot(x_axis, y2, c='b', label='Random Forest (sklearn)', linewidth=2.0)
-ax.plot(x_axis, y3, c='y', label='Naive Bayes (sklearn)', linewidth=2.0)
+ax.plot(x_axis, y2, c='b', marker='o', label='Random Forest (sklearn)', linewidth=2.0)
+ax.plot(x_axis, y3, c='y', marker='x', label='Naive Bayes (sklearn)', linewidth=2.0)
 plt.title('Memory consumption comparison for different feature size selection')
 leg = plt.legend()
 plt.show()
@@ -332,8 +379,10 @@ ax  = fig.add_subplot(111)
 plt.xlabel('Percentage of features selected for finding best split')
 plt.ylabel('Accuracy (out of 100%)')
 plt.xticks(x_axis)
+# ax.plot(x_axis, y1, c='r', dashes=[6,2], label='Random Forest (Scratch)', linewidth=2.0)
+# ax.plot(x_axis, y2, c='b', label='Random Forest (sklearn)', linewidth=2.0)
 ax.plot(x_axis, y2, c='b', label='Random Forest (sklearn)', linewidth=2.0)
-ax.plot(x_axis, y3, c='y', label='Naive Bayes (sklearn)', linewidth=2.0)
+ax.plot(x_axis, y3, c='y', dashes=[6,2], label='Naive Bayes (sklearn)', linewidth=2.0)
 plt.title('Accuracy for different feature size selection (when trees 62)')
 leg = plt.legend()
 plt.show()

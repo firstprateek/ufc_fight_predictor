@@ -53,12 +53,13 @@ accuracy_n_trres = []
 time_n_trees = []
 # for n_trees in [i for i in range(1, 101)]:
 multiplier = (len(dataset[0]) - 1) / 10
-m_array = [ multiplier * i for i in range(2, 11) ]
-# m_array.insert(0, int(sqrt(len(dataset[0])-1)))
-
-for n_features in m_array:
-  # rf = RandomForestClassifier(max_features=n_features, n_estimators = 62, random_state = 42)
-  start = time.time()
+m_array = [ multiplier * i for i in range(1, 11) ]
+m_array.insert(0, int(sqrt(len(dataset[0])-1)))
+n_features = int(sqrt(len(dataset[0])-1))
+start = time.time()
+for n_trees in [i for i in range(1, 101)]:
+  rf = RandomForestClassifier(max_features=n_features, n_estimators = n_trees, random_state = 42)
+  
   fold_accuracy = []
   for train_index, test_index in kf.split(features):
     features_train, features_test = features[train_index], features[test_index]
@@ -68,17 +69,17 @@ for n_features in m_array:
     test_set = np.c_[features_test, labels_test]
 
 
-    predictions = RandomForest(train_set.tolist(), test_set.tolist(), 10, 1, 1.0, 5, n_features).run()
+    #predictions = RandomForest(train_set.tolist(), test_set.tolist(), 10, 1, 1.0, n_trees, int(sqrt(len(dataset[0])-1))).run()
 
-    # rf.fit(features_train, labels_train)
-    
-    #predictions = rf.predict(features_test)
+    rf.fit(features_train, labels_train)
+    predictions = rf.predict(features_test)
+
     errors = abs(np.array(predictions) - labels_test)
     mape = 100 * (errors / labels_test)
     accuracy = 100 - np.mean(mape)
     fold_accuracy.append(accuracy)
 
-  print('accuracy {}'.format(sum(fold_accuracy) / float(len(fold_accuracy))))
+  print('trees: {}, accuracy {}, time: {}'.format(n_trees, accuracy, time.time() - start))
   accuracy_n_trres.append(sum(fold_accuracy) / float(len(fold_accuracy)))
   time_n_trees.append(time.time() - start)
 
