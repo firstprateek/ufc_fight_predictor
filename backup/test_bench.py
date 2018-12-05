@@ -4,6 +4,7 @@ from random import randrange
 from random import seed
 from RandomForest import RandomForest
 from CrossValidation import cross_validate_algorithm
+import time
 
 def load_csv(filename):
   dataset = []
@@ -44,8 +45,10 @@ max_depth = 10
 min_size = 1
 sample_size = 1.0
 n_features = int(sqrt(len(dataset[0])-1))
-for n_trees in [1, 5, 10]:
+start = time.time()
+for n_trees in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
   scores = cross_validate_algorithm(dataset, RandomForest, n_folds, max_depth, min_size, sample_size, n_trees, n_features)
   print('Trees: %d' % n_trees)
   print('Scores: %s' % scores)
   print('Mean Accuracy: %.3f%%' % (sum(scores)/float(len(scores))))
+  print('Time taken: {}'.format(time.time() - start))
