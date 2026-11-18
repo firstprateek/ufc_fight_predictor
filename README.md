@@ -29,7 +29,7 @@ profile and open a new shell. The command keeps the earliest date with at least 
 our fighters exactly, writes `cards/<date>.csv` (gitignored), and lists what it left out and why. The
 feed covers every MMA promotion, so check that the card is the UFC card before logging. Prices are a
 snapshot at fetch time, not closing prices. The raw response is saved under `data/raw/odds_api/`. The
-terms of the feed allow storing data locally but not redistributing it, so none of this is committed.
+terms of the feed allow storing data locally but not redistributing it, so none of this is committed (keep any `--out` file out of the repo too).
 `--date`, `--days`, `--out`, `--force` and `--from-file FILE` (read a saved response, no key needed) are
 available.
 

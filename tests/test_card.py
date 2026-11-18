@@ -4,6 +4,7 @@ prices that are MADE UP. It is not fetched data and contains no real price."""
 
 import csv
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -120,7 +121,7 @@ def test_request_path_parameters_and_key_placement(env, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "Requests remaining this month: 412" in out and KEY not in out
     saved = list((env / "data" / "raw" / "odds_api").glob("*.json"))
-    assert [p.name for p in saved] == ["2026-11-18T120000Z.json"]
+    assert len(saved) == 1 and re.fullmatch(r"\d{4}-\d\d-\d\dT\d{6}Z\.json", saved[0].name)
     assert saved[0].read_bytes() == FIXTURE.read_bytes()
     assert (env / "cards" / "2026-11-21.csv").exists()
 
@@ -474,3 +475,32 @@ def test_the_written_file_runs_through_predict(world, tmp_path, monkeypatch, cap
     p_expected = sorted(remove_margin(*x)[0] for x in [(-150, 130), (-140, 120)])
     assert m["p_market_1"] == pytest.approx(sum(p_expected) / 2, abs=1e-3)
     assert "market" not in doc["fights"][1] or doc["fights"][1]["market"] is None
+
+
+def test_now_with_an_offset_is_converted_and_a_live_fetch_names_the_file_by_the_real_time(
+    env, monkeypatch, capsys
+):
+    assert C.parse_now("2026-11-18T07:00-05:00") == NOW
+    monkeypatch.setattr(C, "new_client", mock_client(ok))
+    assert run_cli(env, "--now", NOW_ARG) == 0
+    (saved,) = (env / "data" / "raw" / "odds_api").glob("*.json")
+    assert saved.name != "2026-11-18T120000Z.json"  # the real clock, not --now
+
+
+def test_an_existing_default_file_after_a_fetch_points_at_the_saved_response(
+    env, monkeypatch, capsys
+):
+    monkeypatch.setattr(C, "new_client", mock_client(ok))
+    assert run_cli(env, "--now", NOW_ARG) == 0
+    capsys.readouterr()
+    assert run_cli(env, "--now", NOW_ARG) == 1
+    err = capsys.readouterr().err
+    assert "--force" in err and "--from-file" in err
+
+
+def test_a_card_dated_today_warns_about_logging_late(env, capsys):
+    now = "2026-11-21T15:00"  # the fights are later that day, New York time
+    assert run_cli(env, "--from-file", str(FIXTURE), "--now", now, "--date", "2026-11-21") == 0
+    assert "logged too late" in capsys.readouterr().out
+    assert run_cli(env, "--from-file", str(FIXTURE), "--now", NOW_ARG, "--force") == 0
+    assert "logged too late" not in capsys.readouterr().out

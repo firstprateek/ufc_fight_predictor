@@ -59,8 +59,8 @@ The 2018 class project is kept under `legacy/2018/` for history only. Nothing in
    2022-12-31.
 
 9. **The upcoming-card feed is read through four fields.** From The Odds API only the two fighter
-   names, the start time and the bookmaker prices (`h2h`) are read (`card.parse_event`); nothing else in
-   a response is looked at. Its terms allow storing the data locally but not redistributing it, so raw
+   names, the start time and the bookmaker prices (`h2h`) are parsed (`card.parse_event`, plus the
+   event id for messages); nothing else in a response is looked at. Its terms allow storing the data locally but not redistributing it, so raw
    responses (`data/raw/odds_api/`) and card files with real prices (`cards/`) are gitignored and never
    committed: not in tests, fixtures, docs or a PR. The test fixture is written by hand with made-up
    prices.
@@ -519,6 +519,12 @@ ufc card [--date YYYY-MM-DD] [--days 10] [--out PATH] [--force] [--from-file res
   closing prices; check that the card is the UFC card before logging; the next command.
 - **`--now`.** Treats the given UTC time as the fetch time when choosing the window. It exists for
   replaying a saved response, whose events would otherwise be outside a window measured from today.
+- **Limits.** The date is the New York date of each event's `commence_time`; if the feed gives
+  per-fight start times, early prelims of a card in Asia or Australia can fall on the previous date
+  and would not be in the file. Names are matched against UFC fighters only, so the earliest date with
+  5 matches could be another promotion's card, which is why the report says to check. Run it with a day
+  to spare: a card dated today or earlier prints a warning, because `score-log` rejects a prediction
+  logged on the fight day.
 
 **Scoring the log: `ufc score-log`.** The 2023 to 2026 holdout has been used, so from now on the only
 fair test of the model is a prediction written down before a fight and scored afterwards. The command

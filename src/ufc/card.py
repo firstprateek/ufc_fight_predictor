@@ -58,7 +58,8 @@ class CardError(Exception):
 
 def parse_now(s: str) -> datetime:
     try:
-        return datetime.fromisoformat(s.replace("Z", "+00:00")).replace(tzinfo=UTC)
+        t = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return t.replace(tzinfo=UTC) if t.tzinfo is None else t.astimezone(UTC)
     except ValueError:
         raise argparse.ArgumentTypeError(f"not a UTC time like 2026-11-18T12:00: {s!r}") from None
 
@@ -419,7 +420,8 @@ def render(plan: Plan, out: Path, source: str, now: datetime, remaining: str | N
 
 def run_card(args, raw: Path, tables: dict, client_factory=None) -> str:
     """Everything `ufc card` does; returns the report. Raises `CardError`."""
-    now = args.now or datetime.now(UTC)
+    clock = datetime.now(UTC)
+    now = args.now or clock
     if args.days < 1:
         raise CardError("--days must be at least 1")
     date = _check_date(args.date) if args.date else None
@@ -441,10 +443,23 @@ def run_card(args, raw: Path, tables: dict, client_factory=None) -> str:
             body, remaining = fetch_response(key, client)
         finally:
             client.close()
-        saved = save_raw(raw, body, now)
+        saved = save_raw(raw, body, clock)  # named by the real fetch time, whatever --now says
         events = parse_body(body, "the response")
-        source = f"Fetched {now:%Y-%m-%d %H:%M:%S} UTC, raw response kept in {saved}"
+        source = f"Fetched {clock:%Y-%m-%d %H:%M:%S} UTC, raw response kept in {saved}"
     plan = plan_card(events, tables, now, args.days, date)
     out = args.out or args.data_dir.parent / "cards" / f"{plan.card_date}.csv"
-    write_card(out, plan.rows, args.force)
-    return render(plan, out, source, now, remaining)
+    try:
+        write_card(out, plan.rows, args.force)
+    except CardError as e:
+        if args.from_file:
+            raise
+        raise CardError(
+            f"{e}. The response is saved ({saved}): `--from-file` reads it again"
+        ) from None
+    text = render(plan, out, source, now, remaining)
+    if plan.card_date <= now.astimezone(CARD_TZ).date().isoformat():
+        text += (
+            "\nWarning: the card date is today or earlier (New York). A prediction logged on the "
+            'fight day is "logged too late" for `ufc score-log`.'
+        )
+    return text
