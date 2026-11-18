@@ -21,6 +21,8 @@ from .features import (
     check_physical,
     check_truncation,
 )
+from .features.params import RATING_PARAMS, TUNE_CUTOFF
+from .features.tune import TuneCutoffError, tune_ratings
 from .odds import OddsError, build_odds, validate_odds
 from .validate import ValidationError, load_tables, validate
 
@@ -77,6 +79,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     ft.add_argument("--sample", type=int, default=200, help="fights to check with --check")
     ft.add_argument("--seed", type=int, default=0, help="sampling seed for --check")
+    tr = sub.add_parser(
+        "tune-ratings",
+        help="tune the rating constants on fights before a cutoff (default 2015-01-01)",
+    )
+    tr.add_argument("--before", default=TUNE_CUTOFF, help="use only fights dated before this day")
     bt = sub.add_parser("backtest", help="walk-forward backtest and report")
     bt.add_argument("--start", default="2015-01-01", help="first day of the test period")
     bt.add_argument(
@@ -143,6 +150,30 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
                 n = min(args.sample, len(feats))
                 print(f"truncation invariance holds on {n} sampled fights")
+        elif args.cmd == "tune-ratings":
+            t = load_tables(processed)
+            params, diag = tune_ratings(t["fights"], t["fight_stats_round"], args.before)
+            print(f"tuned on {diag['fights']} fights dated before {args.before}; one-step-ahead")
+            print(f"error scored from {diag['scored_from']}")
+            g, w, a = diag["glicko"], diag["welo"], diag["adjusted"]
+            print(f"glicko: c={g['c']} log loss {g['log_loss']:.4f} (c=0: {g['log_loss_c0']:.4f})")
+            print(
+                f"method-weighted Elo: log loss {w['log_loss']:.4f} (plain Elo K=32 {w['log_loss_plain_elo']:.4f})"
+            )
+            print(
+                f"adjusted: k0={a['k0']} rate_min={a['rate_min']} standardised mse {a['mse']:.4f} "
+                f"(k0=5, rate_min=0.05: {a['mse_untuned']:.4f})"
+            )
+            print(params)
+            if args.before != TUNE_CUTOFF:
+                print(
+                    f"not compared with the committed constants (they use --before {TUNE_CUTOFF})"
+                )
+            elif params == RATING_PARAMS:
+                print("matches the committed constants")
+            else:
+                print(f"DIFFERS from the committed constants: {RATING_PARAMS}", file=sys.stderr)
+                return 1
         elif args.cmd == "backtest":
             t = load_tables(processed)
             feats = pd.read_parquet(processed / "features.parquet")
@@ -211,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         PhysicalNullError,
         OddsError,
         ProtocolError,
+        TuneCutoffError,
         UnknownFeatureSet,
     ) as e:
         print(e, file=sys.stderr)

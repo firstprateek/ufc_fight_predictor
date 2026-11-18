@@ -26,8 +26,11 @@ from .groups import (
     parse_feature_set,
     set_name,
 )
+from .params import RATING_PARAMS, RatingParams
 
 __all__ = [
+    "RATING_PARAMS",
+    "RatingParams",
     "BASE",
     "DIMENSIONS",
     "GROUPS",

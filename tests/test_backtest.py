@@ -195,7 +195,7 @@ def test_flags_never_reach_a_feature_matrix_and_flagged_fights_are_not_trained_o
     train, test = s[s.date < "2015-01-01"], s[s.date >= "2015-01-01"].head(30)
     assert flagged(train).any()
     MODELS["hgb"](train, train.y.to_numpy(), test)
-    cols = [c for c in feature_columns(train) if train[c].astype(float).nunique() >= 2]
+    cols = [c for c in feature_columns(train, ()) if train[c].astype(float).nunique() >= 2]
     assert mats[0].shape == (2 * (~flagged(train)).sum(), len(cols))
 
 
