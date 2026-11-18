@@ -1,0 +1,31 @@
+[project]
+name = "ufc"
+version = "0.1.0"
+description = "UFC fight data pipeline and win-probability predictor"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "pandas>=2.2",
+    "pyarrow>=16",
+]
+
+[project.scripts]
+ufc = "ufc.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["legacy"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # the formatter owns line length
