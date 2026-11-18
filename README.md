@@ -3,7 +3,7 @@
 Predicts the winner of UFC fights with calibrated probabilities, judged by log loss on fights the model
 has not seen. Milestone 1 (this state of the repo) is the data pipeline: it downloads a public dataset
 of ufcstats.com results and turns it into four validated Parquet tables (`events`, `fights`,
-`fight_stats_round`, `fighters`). Milestone 2 adds point-in-time features (`ufc features`) and a walk-forward backtest of four baselines (`ufc backtest`); results in [`docs/results/baseline.md`](docs/results/baseline.md). Models are also scored against the betting market ([`docs/results/market.md`](docs/results/market.md)).
+`fight_stats_round`, `fighters`). Milestone 2 adds point-in-time features (`ufc features`) and a walk-forward backtest of four baselines (`ufc backtest`); results in [`docs/results/baseline.md`](docs/results/baseline.md). Models are also scored against the betting market ([`docs/results/market.md`](docs/results/market.md)). Skill-rating, opponent-adjusted and context features, evaluated under a development / holdout protocol, are in [`docs/results/ratings.md`](docs/results/ratings.md); its numbers use the pinned snapshots `ufc fetch --sha 96adace863c0a793579cc06d27d468797545607f --odds-sha 31d2941509506c9f20e02a5f1de9c253c5289f9c` (plain `ufc fetch` takes the latest upstream, so a later run differs slightly).
 
 ```
 uv sync
