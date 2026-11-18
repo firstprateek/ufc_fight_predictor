@@ -211,6 +211,12 @@ def _classify(rows: list[Row], fights: pd.DataFrame) -> list[dict]:
             else:
                 entry["status"] = DID_NOT_HAPPEN
                 entry["reason"] = f"no fight between these two by {end}"
+                later = next((f for f in pair if f["_d"] > end), None)
+                if later is not None:
+                    entry["reason"] += (
+                        f" (they fought on {later['_d']}, more than {MATCH_WINDOW_DAYS} days after "
+                        "the logged date, so it is not counted)"
+                    )
         out.append(entry)
     # one prediction per fight: the latest eligible row (run time, then file order)
     groups: dict[str, list[dict]] = {}
@@ -425,3 +431,14 @@ def run(log: Path, processed: Path) -> dict | None:
     fights = pd.read_parquet(processed / "fights.parquet")
     ids = set(pd.read_parquet(processed / "fighters.parquet")["fighter_id"])
     return score(read_log(log, ids), fights)
+
+
+def is_log_file(out: Path, log: Path) -> bool:
+    """True when `out` is the log itself or an existing file that starts with the log's header."""
+    out, log = Path(out), Path(log)
+    if out.exists() and log.exists() and out.samefile(log):
+        return True
+    if out.is_file():
+        with out.open(newline="") as fh:
+            return next(csv.reader(fh), []) == LOG_COLUMNS
+    return False

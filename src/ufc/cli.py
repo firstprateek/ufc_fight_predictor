@@ -185,7 +185,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     sl.add_argument("--log", type=Path, help=f"the log (default: {predict_mod.LOG_PATH})")
     sl.add_argument("--json", action="store_true", help="print one JSON document")
-    sl.add_argument("--out", type=Path, help="also write the readable report to this file")
+    sl.add_argument(
+        "--out",
+        type=Path,
+        help="also write the readable report (text, even with --json) to this file",
+    )
     args = ap.parse_args(argv)
     raw, processed = args.data_dir / "raw", args.data_dir / "processed"
 
@@ -284,6 +288,10 @@ def main(argv: list[str] | None = None) -> int:
             _predict(args, raw, processed)
         elif args.cmd == "score-log":
             log = args.log or raw.parent.parent / predict_mod.LOG_PATH
+            if args.out and score_mod.is_log_file(args.out, log):
+                raise score_mod.ScoreLogError(
+                    f"--out {args.out} is the prediction log; it is never written"
+                )
             doc = score_mod.run(log, processed)
             if doc is None:
                 print(f"no predictions to score: {log} is missing or empty")

@@ -485,6 +485,11 @@ ufc score-log [--log PATH] [--json] [--out FILE]
   written on the fight's date or later is "logged too late" and never scored: log at least the day
   before. A row written after a fight between the pair that fell in the logged date's window (45 days
   either side) is also "logged too late".
+  The window has no lower bound beyond the run date: a row that names a date long after the fight it
+  matches is still matched to that earlier fight. A row whose pair fought only after the window is
+  `did not happen`, and its reason says so. The row's day is the UTC date and the fight's `date` is the
+  local date of the event, so a row written late on the UTC day before an early-morning fight far east
+  can count although the fight was nearly over; log earlier than the last day if that matters.
 - **One prediction per fight.** Among eligible rows matching one fight the latest `run_utc` is scored
   (file order breaks a tie) and the earlier ones are reported as superseded. The choice never looks at
   the probability or the outcome.

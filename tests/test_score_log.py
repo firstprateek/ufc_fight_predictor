@@ -367,3 +367,21 @@ def test_no_advice_wording(env, capsys):
     )
     for t in texts:
         assert not banned.search(t)
+
+
+def test_out_never_overwrites_the_log(env, capsys):
+    tmp, base = env
+    p = write(tmp / "log.csv", [row()])
+    before = p.read_bytes()
+    assert main(base + ["--log", str(p), "--out", str(p)]) == 1
+    assert "never written" in capsys.readouterr().err
+    other = write(tmp / "other_log.csv", [row()])  # another log must not be clobbered either
+    assert main(base + ["--log", str(p), "--out", str(other)]) == 1
+    assert p.read_bytes() == before
+
+
+def test_a_fight_after_the_window_is_named_in_the_reason(tmp_path):
+    late = row(a="G", b="H", run="2025-11-01T00:00:00Z", day="2025-12-01")  # f5 is 02-01
+    s = scored([late], tmp_path)
+    assert s["status_counts"][S.DID_NOT_HAPPEN] == 1
+    assert "they fought on 2026-02-01" in s["not_scored"][0]["reason"]
