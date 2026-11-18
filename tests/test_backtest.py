@@ -36,6 +36,7 @@ def synthetic(n_fights=700, seed=1):
                     "date": str(day.date()), "bout_order": b + 1, "fighter_1_id": f1,
                     "fighter_2_id": f2, "winner_id": win, "outcome": "win",
                     "method": "KO/TKO", "end_round": 1, "end_time_s": 100,
+                    "weight_class": "Lightweight", "gender": "male",
                 }
             )  # fmt: skip
         day += pd.Timedelta(days=7)

@@ -1,4 +1,5 @@
 import math
+from dataclasses import replace
 
 import pandas as pd
 import pytest
@@ -7,9 +8,13 @@ from ufc.features import (
     ELO_K,
     ELO_START,
     HALF_LIFE_FIGHTS,
+    Imputation,
+    PhysicalNullError,
     build_features,
+    check_physical,
     check_truncation,
     feature_columns,
+    fit_imputation,
     swap_orientation,
 )
 
@@ -30,6 +35,7 @@ def _fight(fid, day, f1, f2, winner, outcome, method, end_round, end_time_s, ord
         "fight_id": fid, "event_id": "e" + day, "date": day, "bout_order": order,
         "fighter_1_id": f1, "fighter_2_id": f2, "winner_id": winner, "outcome": outcome,
         "method": method, "end_round": end_round, "end_time_s": end_time_s,
+        "weight_class": "Lightweight", "gender": "male",
     }  # fmt: skip
 
 
@@ -116,11 +122,102 @@ def test_physical_features(feats):
     assert r.f1_age == pytest.approx(
         (pd.Timestamp("2020-01-01") - pd.Timestamp("1990-01-01")).days / 365.25
     )
-    assert pd.isna(r.f2_age) and pd.isna(r.diff_age)
-    assert r.diff_height_cm == 5.0 and pd.isna(r.diff_reach_cm)
+    imp = fit_imputation(FIGHTS, FIGHTERS)
+    assert r.f2_age == imp.age == r.f2_age and r.diff_age == pytest.approx(r.f1_age - imp.age)
+    assert r.diff_height_cm == 5.0
+    assert r.f2_reach_cm == pytest.approx(175.0 * imp.reach_ratio)  # B: imputed from height
     assert (r.f1_stance, r.f2_stance, r.f1_southpaw, r.f2_southpaw, r.diff_southpaw) == (
         "Orthodox", "Southpaw", 0.0, 1.0, -1.0,
     )  # fmt: skip
+    c = feats.loc["f2"]  # C lacks height and stance: group median, Orthodox
+    assert c.f2_height_cm == 177.5 and c.f2_reach_cm == 170.0
+    assert (c.f2_stance, c.f2_southpaw) == ("Orthodox", 0.0)
+
+
+def test_imputation_constants():
+    imp = fit_imputation(FIGHTS, FIGHTERS)
+    assert imp.height_global == 177.5 and imp.stance == "Orthodox"
+    assert imp.height_group == {("Lightweight", "male"): 177.5}
+    assert imp.reach_ratio == pytest.approx(185.0 / 180.0)
+
+
+def test_height_imputation_falls_back_to_gender_then_global():
+    imp = Imputation(
+        height_global=170.0,
+        height_gender={"female": 165.0},
+        height_group={("Strawweight", "female"): 160.0},
+        reach_ratio=1.0,
+        age=30.0,
+        stance="Orthodox",
+        group_of={
+            "s": ("Strawweight", "female"),
+            "f": ("Flyweight", "female"),
+            "m": ("Welterweight", "male"),
+        },
+    )
+    assert (imp.height("s"), imp.height("f"), imp.height("m")) == (160.0, 165.0, 170.0)
+    assert imp.height("never fought") == 170.0
+
+
+def test_group_is_the_most_frequent_division():
+    fights = FIGHTS.copy()
+    fights.loc[fights.fight_id == "f1", "weight_class"] = "Welterweight"
+    assert fit_imputation(fights, FIGHTERS).group_of["B"] == ("Lightweight", "male")
+
+
+def test_missing_snapshot_fields_leave_no_trace_in_the_row():
+    # C lacks height, reach, stance and dob. Its feature row must equal the row built when those
+    # are replaced by the imputed values: nothing else may betray that they were missing.
+    bare = FIGHTERS.copy()
+    bare.loc[bare.fighter_id == "C", ["height_cm", "reach_cm", "stance", "dob"]] = None
+    fights = FIGHTS[FIGHTS.fight_id == "f2"]  # A vs C, one date
+    stats = STATS[STATS.fight_id == "f2"]
+    imp = replace(fit_imputation(FIGHTS, bare), age=10000 / 365.25)  # exactly 10000 days old
+    a = build_features(fights, stats, bare, imp)
+    check_physical(a)
+    h = imp.height("C")
+    filled = bare.copy()
+    filled.loc[filled.fighter_id == "C", ["height_cm", "reach_cm", "stance", "dob"]] = [
+        h, h * imp.reach_ratio, imp.stance, str(pd.Timestamp("2020-02-01") - pd.Timedelta(days=10000))[:10],
+    ]  # fmt: skip
+    b = build_features(fights, stats, filled, imp)
+    pd.testing.assert_frame_equal(a, b)
+    assert a.f2_height_cm[0] == h and a.f2_stance[0] == "Orthodox"
+    # whole fixture: no physical null anywhere, and the rest of C's rows is the same
+    full = build_features(FIGHTS, STATS, bare, imp)
+    check_physical(full)
+
+
+def test_physical_null_guard():
+    df = build_features(FIGHTS, STATS, FIGHTERS)
+    check_physical(df)  # clean
+    for col in ("f1_reach_cm", "f2_stance", "diff_age", "f1_southpaw"):
+        bad = df.copy()
+        bad[col] = bad[col].astype(object)
+        bad.loc[0, col] = None
+        with pytest.raises(PhysicalNullError, match=col):
+            check_physical(bad)
+
+
+def test_cli_features_fails_on_a_physical_null(tmp_path, monkeypatch, capsys):
+    from pathlib import Path
+
+    import ufc.cli as cli
+    from ufc.build import build
+
+    fix = Path(__file__).parent / "fixtures"
+    build(fix / "source", tmp_path / "processed", fix / "overrides")
+    real = cli.build_features
+
+    def nulled(*a, **k):
+        df = real(*a, **k)
+        df["f1_reach_cm"] = None
+        return df
+
+    monkeypatch.setattr(cli, "build_features", nulled)
+    assert cli.main(["--data-dir", str(tmp_path), "features"]) == 1
+    assert "physical" in capsys.readouterr().err
+    assert not (tmp_path / "processed" / "features.parquet").exists()
 
 
 def test_career_rates(feats):
@@ -195,8 +292,8 @@ def test_truncation_check_catches_a_leaky_builder(monkeypatch):
 
     real = B.build_features
 
-    def leaky(fights, stats, fighters):  # depends on how many fights exist in total
-        df = real(fights, stats, fighters)
+    def leaky(fights, stats, fighters, imputation=None):  # depends on how many fights exist
+        df = real(fights, stats, fighters, imputation)
         df["f1_elo"] = df["f1_elo"] + len(fights)
         return df
 
@@ -231,7 +328,7 @@ def test_orientation_swap(feats):
     assert (sw.f1_elo == df.f2_elo).all() and (sw.f2_elo == df.f1_elo).all()
     pd.testing.assert_series_equal(sw.diff_elo, -df.diff_elo)
     pd.testing.assert_frame_equal(swap_orientation(sw), df)
-    assert math.isnan(sw.loc[0, "diff_age"])
+    assert sw.loc[0, "diff_age"] == -df.loc[0, "diff_age"] and not math.isnan(sw.loc[0, "diff_age"])
 
 
 def test_cli_features_check(tmp_path, capsys):

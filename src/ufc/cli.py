@@ -12,7 +12,7 @@ from . import fetch as fetch_mod
 from .backtest import LeakSuspected, run_backtest
 from .backtest.run import default_out_dir
 from .build import build
-from .features import build_features, check_truncation
+from .features import PhysicalNullError, build_features, check_physical, check_truncation
 from .validate import ValidationError, load_tables, validate
 
 
@@ -65,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "features":
             t = load_tables(processed)
             feats = build_features(t["fights"], t["fight_stats_round"], t["fighters"])
+            check_physical(feats)
             feats.to_parquet(processed / "features.parquet", index=False)
             print(f"features: {len(feats)} rows, {feats.shape[1]} columns")
             if args.check:
@@ -104,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"validation passed; fights without round stats: {rep['fights_without_round_stats']}"
             )
-    except (ValidationError, FileNotFoundError) as e:
+    except (ValidationError, FileNotFoundError, PhysicalNullError) as e:
         print(e, file=sys.stderr)
         return 1
     return 0

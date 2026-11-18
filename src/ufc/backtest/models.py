@@ -72,7 +72,10 @@ def _symmetric(make, matrix):
 def logistic_regression(train, y, test) -> np.ndarray:
     def make():
         return make_pipeline(
-            SimpleImputer(strategy="median", add_indicator=True),  # train medians + missing flags
+            # train medians + missing flags. Only history columns can be null (debutants, real
+            # point-in-time information); the physical columns never are, so no flag can encode
+            # snapshot missingness.
+            SimpleImputer(strategy="median", add_indicator=True),
             StandardScaler(),
             LogisticRegression(C=LOGREG_C, max_iter=1000),
         )
