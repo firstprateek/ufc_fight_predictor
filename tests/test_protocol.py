@@ -82,8 +82,9 @@ def test_protocol_refuses_unfrozen_sets_past_development():
             P.check_run("base", bad)
 
 
-def test_run_backtest_enforces_the_protocol(data, tmp_path):
+def test_run_backtest_enforces_the_protocol(data, tmp_path, monkeypatch):
     fights, feats = data
+    monkeypatch.setattr(P, "FINAL_FEATURE_SET", None)
     with pytest.raises(P.ProtocolError):
         run_backtest(feats, fights, "2015-01-01", tmp_path / "r", features_set="all")
     assert not (tmp_path / "r").exists()
@@ -231,7 +232,8 @@ def test_decision_rule_drops_only_a_group_clearly_worse_than_base():
     assert "adjusted" in decide(better)[0]
 
 
-def test_cli_refuses_an_unfrozen_set_past_development(tmp_path, capsys):
+def test_cli_refuses_an_unfrozen_set_past_development(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(P, "FINAL_FEATURE_SET", None)
     from pathlib import Path
 
     from ufc.build import build
@@ -244,6 +246,9 @@ def test_cli_refuses_an_unfrozen_set_past_development(tmp_path, capsys):
     args = ["--data-dir", str(tmp_path), "backtest", "--reports-dir", str(tmp_path / "rep")]
     assert main([*args, "--features-set", "all"]) == 1
     assert "not frozen" in capsys.readouterr().err
+    monkeypatch.setattr(P, "FINAL_FEATURE_SET", "ratings")
+    assert main([*args, "--features-set", "all"]) == 1  # frozen to something else
+    assert "only the frozen" in capsys.readouterr().err
     assert main([*args, "--features-set", "nonsense", "--end", "2022-12-31"]) == 1
     assert "unknown feature set" in capsys.readouterr().err
 
@@ -263,3 +268,14 @@ def test_cli_rejects_end_in_a_non_canonical_form_and_ablation_with_flags(tmp_pat
     assert "YYYY-MM-DD" in capsys.readouterr().err
     assert main([*args, "--ablation", "--end", "2020-12-31"]) == 1
     assert "do not combine" in capsys.readouterr().err
+
+
+def test_the_committed_freeze_is_the_default_and_protects_other_sets():
+    assert P.FINAL_FEATURE_SET == "all"  # frozen in the commit named in docs/results/ratings.md
+    P.check_run("base", None)
+    P.check_run("all", None)
+    P.check_run("ratings", P.DEV_END)
+    with pytest.raises(P.ProtocolError, match="only the frozen"):
+        P.check_run("ratings", None)
+    with pytest.raises(P.ProtocolError, match="only the frozen"):
+        P.check_run("ratings+adjusted", "2025-01-01")

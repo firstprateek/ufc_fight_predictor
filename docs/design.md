@@ -325,6 +325,10 @@ construction, the truncation check (a 200-fight sample) and the tests that flip 
   paired-bootstrap 95% interval (events resampled, 1,000 draws) that excludes zero. No other
   selection. (The rule compares each group with `base` rather than `all` with `all` minus the group:
   that is what the ablation table shows, fixed before any number existed.)
+- `ufc ratings-report --frozen-commit <sha>` writes `docs/results/ratings.md`: it checks that the commit
+  is an ancestor of HEAD and holds the frozen configuration, re-runs the development ablation and
+  requires the decision rule to give the frozen configuration, then runs the frozen configuration and
+  `base` on development, holdout and the full period, against the market, with the constants.
 - Until a commit freezes the configuration (`FINAL_FEATURE_SET` in `backtest/protocol.py`), only `base`
   may run past `--end 2022-12-31`; afterwards only `base` and the frozen set may. A feature set
   whose columns are not in `features.parquet` does not run.

@@ -16,7 +16,7 @@ HOLDOUT_START = "2023-01-01"
 
 # The frozen configuration: the feature set `ufc backtest` runs by default. None until it is
 # frozen. Until then nothing but `base` may be run past DEV_END; after, only `base` and this set.
-FINAL_FEATURE_SET: str | None = None
+FINAL_FEATURE_SET: str | None = "all"
 
 # the sets of the development ablation, in table order
 ABLATION_SETS = SET_NAMES
@@ -36,12 +36,15 @@ def check_date(name: str, value: str) -> None:
         raise ProtocolError(f"{name} must be YYYY-MM-DD, got {value!r}")
 
 
-def check_run(features_set: str, end: str | None, final: str | None = None) -> None:
+_UNSET = object()
+
+
+def check_run(features_set: str, end: str | None, final=_UNSET) -> None:
     """Refuse a run that would show holdout results for a configuration that is not frozen.
 
     `base` may always run (its holdout numbers are already published). Anything else may run past
     DEV_END only when it is the frozen configuration. `final` defaults to FINAL_FEATURE_SET."""
-    final = FINAL_FEATURE_SET if final is None else final
+    final = FINAL_FEATURE_SET if final is _UNSET else final
     if end is not None:
         check_date("--end", end)
     if parse_feature_set(features_set) == () or (end is not None and end <= DEV_END):
