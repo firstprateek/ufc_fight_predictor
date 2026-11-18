@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
         help="also verify truncation invariance on a random sample of fights",
     )
     ft.add_argument("--sample", type=int, default=200, help="fights to check with --check")
+    ft.add_argument("--seed", type=int, default=0, help="sampling seed for --check")
     args = ap.parse_args(argv)
     raw, processed = args.data_dir / "raw", args.data_dir / "processed"
 
@@ -61,7 +62,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"features: {len(feats)} rows, {feats.shape[1]} columns")
             if args.check:
                 bad = check_truncation(
-                    t["fights"], t["fight_stats_round"], t["fighters"], feats, args.sample
+                    t["fights"],
+                    t["fight_stats_round"],
+                    t["fighters"],
+                    feats,
+                    args.sample,
+                    args.seed,
                 )
                 if bad:
                     print(f"LEAK: truncation check failed for fights {bad}", file=sys.stderr)

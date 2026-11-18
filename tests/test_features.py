@@ -40,6 +40,7 @@ FIGHTS = pd.DataFrame(
         _fight("f3", "2020-02-01", "B", "C", None, "draw", "Decision - Majority", 3, 300, 2),
         _fight("f4", "2020-03-01", "A", "B", None, "nc", "Overturned", 3, 300),
         _fight("f5", "2020-04-01", "A", "C", "A", "win", "Decision - Unanimous", 3, 300),
+        _fight("f6", "2020-05-01", "A", "C", "A", "win", "Decision - Unanimous", 3, 300),
     ]
 ).astype({"end_round": "Int64", "end_time_s": "Int64"})
 
@@ -73,7 +74,7 @@ def feats():
 
 
 def test_one_row_per_fight_with_expected_columns(feats):
-    assert list(feats.index) == ["f1", "f2", "f3", "f4", "f5"]
+    assert list(feats.index) == ["f1", "f2", "f3", "f4", "f5", "f6"]
     for c in ("f1_elo", "f2_elo", "diff_elo", "f1_slpm_ewm", "diff_age", "f2_stance"):
         assert c in feats.columns
     assert "diff_stance" not in feats.columns
@@ -140,10 +141,13 @@ def test_career_rates(feats):
 
 
 def test_exponentially_weighted_rates(feats):
-    r = feats.loc["f5"]  # A's prior fights, oldest first: f1, f2, f3, f4 -> f1 is 3 back, f2 is 2
-    w1, w2 = 0.5 ** (3 / HALF_LIFE_FIGHTS), 0.5 ** (2 / HALF_LIFE_FIGHTS)
-    assert r.f1_slpm_ewm == pytest.approx((w1 * 30 + w2 * 20) / (w1 * 1 + w2 * 400 / 60))
-    assert r.f1_str_acc_ewm == pytest.approx((w1 * 30 + w2 * 20) / (w1 * 40 + w2 * 40))
+    # A's prior fights before f6, oldest first: f1, f2, f4 (no stats, still takes a slot), f5.
+    # So f1 is 3 fights back, f2 is 2 back, f5 is the most recent (weight 1).
+    r = feats.loc["f6"]
+    w1, w2, w5 = 0.5 ** (3 / HALF_LIFE_FIGHTS), 0.5 ** (2 / HALF_LIFE_FIGHTS), 1.0
+    assert r.f1_str_acc_ewm == pytest.approx(
+        (w1 * 30 + w2 * 20 + w5 * 50) / (w1 * 40 + w2 * 40 + w5 * 100)
+    )
     one = feats.loc["f2"]  # a single prior fight: weighted and career agree
     assert one.f1_slpm_ewm == pytest.approx(one.f1_slpm_career)
 
@@ -183,14 +187,22 @@ def test_diffs_are_f1_minus_f2(feats):
 def test_truncation_invariance():
     full = build_features(FIGHTS, STATS, FIGHTERS)
     # every fight dated on or after f5, f4 or f2 removed (the fight itself kept)
-    assert check_truncation(FIGHTS, STATS, FIGHTERS, full, sample=5) == []
+    assert check_truncation(FIGHTS, STATS, FIGHTERS, full, sample=6) == []
 
 
-def test_truncation_check_catches_a_leak():
-    full = build_features(FIGHTS, STATS, FIGHTERS)
-    leaky = full.copy()
-    leaky.loc[leaky.fight_id == "f3", "f1_elo"] += 1.0
-    assert check_truncation(FIGHTS, STATS, FIGHTERS, leaky, sample=5) == ["f3"]
+def test_truncation_check_catches_a_leaky_builder(monkeypatch):
+    import ufc.features.build as B
+
+    real = B.build_features
+
+    def leaky(fights, stats, fighters):  # depends on how many fights exist in total
+        df = real(fights, stats, fighters)
+        df["f1_elo"] = df["f1_elo"] + len(fights)
+        return df
+
+    monkeypatch.setattr(B, "build_features", leaky)
+    full = B.build_features(FIGHTS, STATS, FIGHTERS)
+    assert len(check_truncation(FIGHTS, STATS, FIGHTERS, full, sample=6)) >= 4
 
 
 def test_features_unchanged_by_later_results():
@@ -200,6 +212,16 @@ def test_features_unchanged_by_later_results():
     a = build_features(FIGHTS, STATS, FIGHTERS).set_index("fight_id")
     b = build_features(flipped, STATS, FIGHTERS).set_index("fight_id")
     pd.testing.assert_frame_equal(a.loc[["f1", "f2", "f3", "f4"]], b.loc[["f1", "f2", "f3", "f4"]])
+
+
+def test_features_do_not_use_the_fights_own_result_or_stats():
+    # The truncation check keeps the fight itself, so this property is tested separately.
+    flipped = FIGHTS.copy()
+    flipped.loc[flipped.fight_id == "f5", ["winner_id", "method"]] = ["C", "KO/TKO"]
+    stats = STATS[STATS.fight_id != "f5"]
+    a = build_features(FIGHTS, STATS, FIGHTERS).set_index("fight_id").loc["f5"]
+    b = build_features(flipped, stats, FIGHTERS).set_index("fight_id").loc["f5"]
+    pd.testing.assert_series_equal(a, b)
 
 
 def test_orientation_swap(feats):

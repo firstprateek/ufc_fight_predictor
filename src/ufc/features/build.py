@@ -230,6 +230,7 @@ def build_features(
         for r in recs:  # 2. update the state with this date's fights
             f1, f2 = r["fighter_1_id"], r["fighter_2_id"]
             if r["outcome"] == "win":
+                assert r["winner_id"] in (f1, f2), f"winner of {r['fight_id']} is not a fighter"
                 res1, res2, s1 = ("W", "L", 1.0) if r["winner_id"] == f1 else ("L", "W", 0.0)
             elif r["outcome"] == "draw":
                 res1 = res2 = "D"

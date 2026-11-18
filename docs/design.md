@@ -108,14 +108,19 @@ joins `fights`. Target (later): `p_f1`, the probability that `fighter_1_id` wins
 **Point-in-time rule.** Fights are processed one date at a time. Every fight of a date is featurised
 from the state before that date, then the state is updated. So a fight sees only fights dated strictly
 earlier; same-day earlier bouts (old tournament nights) are ignored on purpose. `fighters` is a current
-snapshot: only `height_cm`, `reach_cm`, `stance` and `dob` are used from it.
+snapshot: only `height_cm`, `reach_cm`, `stance` and `dob` are used from it. Known limitation: these
+are today's values, so a reach or stance changed after a fight is not seen as it was then, and the
+truncation guard (which truncates fights and stats, not the snapshot) cannot detect that. Also,
+`reach_cm` is null for most fights before about 2010 and almost none after 2018, so its missingness
+proxies the era.
 
 Features (each exists as `f1_x`, `f2_x`, `diff_x` unless noted):
 
 - Experience: `n_fights`, `n_wins`, `n_losses`, `win_rate` (wins / prior fights, draws and no contests
   in the denominator), `win_streak`, `loss_streak` (a draw or no contest ends both), `days_since_last`,
-  `ko_win_share`, `sub_win_share` (of wins), `ko_loss_share` (of losses). KO/TKO includes doctor's
-  stoppages.
+  `ko_win_share`, `sub_win_share` (of wins), `ko_loss_share` (of losses). Method mapping: `KO/TKO` and
+  `TKO - Doctor's Stoppage` are KO; `Submission` is submission; everything else (decisions, DQ, could not
+  continue, overturned, other) is neither.
 - Physical: `age` (years at fight date from `dob`), `height_cm`, `reach_cm`, `stance` (strings, no diff)
   and `southpaw` (1.0 / 0.0, null if stance unknown).
 - Rates, each as `x_career` (ratio of sums over all prior fights with the stat) and `x_ewm`
@@ -123,7 +128,8 @@ Features (each exists as `f1_x`, `f2_x`, `diff_x` unless noted):
   before 0.5^(1/3), and so on): `slpm`, `sapm` (significant strikes landed / absorbed per minute),
   `str_acc`, `str_def`, `td15` (takedowns landed per 15 min), `td_acc`, `td_def`, `sub15`, `kd15`,
   `kda15` (knockdowns scored / suffered per 15 min), `ctrl_share`, `ctrled_share` (share of fight time
-  in control / being controlled). Duration = (end_round - 1) x 300 + end_time_s seconds. A fight
+  in control / being controlled). Duration = (end_round - 1) x 300 + end_time_s seconds (assumes
+  5-minute rounds, so the ~180 early fights with 1 or 2 scheduled rounds get inexact per-minute rates). A fight
   without round stats for both fighters, or without an end time, adds nothing to the rates but still
   counts for experience. A rate is null when its denominator is 0 (for example takedown accuracy
   with no attempts).
@@ -136,7 +142,8 @@ Features (each exists as `f1_x`, `f2_x`, `diff_x` unless noted):
 
 Leak guard: `ufc features --check` rebuilds the features for a random sample of 200 real fights with
 every fight dated on or after them removed from the inputs (the fight itself kept) and requires an
-identical row; it exits non-zero otherwise. The same property is a unit test on fixtures.
+identical row (`--seed` changes the sample); it exits non-zero otherwise. It cannot see a dependence on
+the fight's own result or stats (the fight is kept), which has its own unit test. The same property is a unit test on fixtures.
 
 ## Later
 
