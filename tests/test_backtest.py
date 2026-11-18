@@ -137,3 +137,30 @@ def test_tripwire_fires_on_a_leak(data, tmp_path):
     with pytest.raises(LeakSuspected, match="leak is likely"):
         run_backtest(leaky, fights, "2015-01-01", tmp_path / "r")
     assert (tmp_path / "r" / "report.md").exists()  # the report is still written
+
+
+def test_labels_from_the_test_quarter_on_never_reach_earlier_predictions(data):
+    fights, feats = data
+    s = scored_fights(feats, fights)
+    base = walk_forward(s, "2015-01-01")
+    cut = "2015-10-01"
+    flipped = s.copy()
+    flipped.loc[flipped.date >= cut, "y"] = 1 - flipped.loc[flipped.date >= cut, "y"]
+    alt = walk_forward(flipped, "2015-01-01")
+    early = base.date < cut
+    cols = [f"p_{m}" for m in MODELS]
+    pd.testing.assert_frame_equal(base.loc[early, cols], alt.loc[early, cols])
+    assert not np.allclose(base.loc[~early, "p_hgb"], alt.loc[~early, "p_hgb"])
+
+
+def test_swap_is_an_involution(data):
+    _, feats = data
+    pd.testing.assert_frame_equal(swap_orientation(swap_orientation(feats)), feats)
+
+
+def test_paired_bootstrap_interval_contains_zero_under_the_null():
+    rng = np.random.default_rng(1)
+    ev = np.repeat(np.arange(150), 4)
+    a, b = rng.uniform(0.5, 0.8, 600), rng.uniform(0.5, 0.8, 600)
+    d, lo, hi = M.paired_bootstrap(a, b, ev, draws=300)
+    assert lo < 0 < hi

@@ -174,7 +174,9 @@ equal-width bins with every fight counted from both fighters' views; accuracy co
 Leak guards: the truncation check above; the orientation check (each quarter, `logreg` and `hgb`
 must give `1 - p` for swapped fighters, and training dates must precede the quarter, else the run
 fails); and a tripwire: if any model's overall accuracy exceeds 75% the report is written, the command
-exits non-zero and says a leak is likely. Real accuracy is expected around 55-65%.
+exits non-zero and says a leak is likely. Real accuracy is expected around 55-65%. The tripwire only
+catches gross leaks (a subtle one would sit under 75%); the real protection is the point-in-time
+construction, the truncation check (a 200-fight sample) and the tests that flip later labels and results.
 
 ## Later
 

@@ -26,6 +26,7 @@ LOGREG_DIFFS = [
     "diff_sig_diff",  # career significant strikes landed minus absorbed per minute
 ]
 
+# Chosen a priori (common conservative defaults for ~10k rows), not tuned on any data here.
 HGB_PARAMS = dict(
     max_iter=200,
     learning_rate=0.05,

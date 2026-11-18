@@ -45,6 +45,8 @@ def walk_forward(scored: pd.DataFrame, start: str) -> pd.DataFrame:
         part = test[["fight_id", "event_id", "date", "y"]].copy()
         part["quarter"] = q
         sw = swap_orientation(test)
+        if not swap_orientation(sw).equals(test):
+            raise LeakSuspected("swap_orientation is not an involution")
         for name, model in MODELS.items():
             p = model(train, train.y.to_numpy(), test)
             part[f"p_{name}"] = p
@@ -105,7 +107,7 @@ def summary_markdown(pred: pd.DataFrame) -> tuple[str, dict]:
     md.append(
         _table(
             [[f"{lo:.1f}-{hi:.1f}", n, f"{mp:.3f}", f"{obs:.3f}"] for lo, hi, n, mp, obs in cal],
-            ["p bin", "n", "mean predicted", "observed win rate"],
+            ["p bin", "fighter views", "mean predicted", "observed win rate"],
         )
     )
     return "\n".join(md), overall
