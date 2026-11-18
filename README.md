@@ -14,13 +14,24 @@ uv run ufc predict "Fighter A" "Fighter B" [--date YYYY-MM-DD] [--weight-class N
 uv run ufc predict --card card.csv     # one row per fight; see examples/card.csv
 ```
 
-Weekly routine, three commands:
+Weekly routine, four commands:
 
 ```
 uv run ufc fetch && uv run ufc build                 # 1. refresh the data
-uv run ufc predict --card card.csv --log             # 2. before the event, at least the day before
-uv run ufc score-log                                 # 3. after the next refresh
+uv run ufc card                                      # 2. the next card with prices, to cards/<date>.csv
+uv run ufc predict --card cards/<date>.csv --log     # 3. at least a day before the event
+uv run ufc score-log                                 # 4. after the next refresh
 ```
+
+`ufc card` needs a free key from [the-odds-api.com](https://the-odds-api.com) (500 requests a month; one
+card is one request). One-time setup: sign up, then add `export ODDS_API_KEY=<your key>` to your shell
+profile and open a new shell. The command keeps the earliest date with at least five fights that match
+our fighters exactly, writes `cards/<date>.csv` (gitignored), and lists what it left out and why. The
+feed covers every MMA promotion, so check that the card is the UFC card before logging. Prices are a
+snapshot at fetch time, not closing prices. The raw response is saved under `data/raw/odds_api/`. The
+terms of the feed allow storing data locally but not redistributing it, so none of this is committed.
+`--date`, `--days`, `--out`, `--force` and `--from-file FILE` (read a saved response, no key needed) are
+available.
 
 `ufc score-log` scores `predictions/log.csv` against what happened. A row counts only if it was
 written on an earlier day than the fight; one prediction per fight (the latest); draws and no contests

@@ -1,0 +1,868 @@
+[
+ {
+  "id": "e01",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-18T10:00:00Z",
+  "home_team": "Ty Miller",
+  "away_team": "Eduardo Chapolin",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Ty Miller",
+        "price": -110
+       },
+       {
+        "name": "Eduardo Chapolin",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e02",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-19T23:00:00Z",
+  "home_team": "Tanner Boser",
+  "away_team": "Mick Parkin",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Tanner Boser",
+        "price": -110
+       },
+       {
+        "name": "Mick Parkin",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_b",
+    "title": "Made Up bk_b",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Tanner Boser",
+        "price": -200
+       },
+       {
+        "name": "Mick Parkin",
+        "price": 150
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e03",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-19T22:00:00Z",
+  "home_team": "Marcos Degli",
+  "away_team": "Mitch Raposo",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Marcos Degli",
+        "price": -200
+       },
+       {
+        "name": "Mitch Raposo",
+        "price": 150
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e04",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-19T21:00:00Z",
+  "home_team": "Rob Font",
+  "away_team": "Adrian Yanez",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Rob Font",
+        "price": -110
+       },
+       {
+        "name": "Adrian Yanez",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e10",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-21T20:00:00Z",
+  "home_team": "Gabriel Bonfim",
+  "away_team": "Michael Oliveira",
+  "bookmakers": [
+   {
+    "key": "bk_c",
+    "title": "Made Up bk_c",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Gabriel Bonfim",
+        "price": -300
+       },
+       {
+        "name": "Michael Oliveira",
+        "price": 250
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Gabriel Bonfim",
+        "price": -110
+       },
+       {
+        "name": "Michael Oliveira",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_b",
+    "title": "Made Up bk_b",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Michael Oliveira",
+        "price": 150
+       },
+       {
+        "name": "Gabriel Bonfim",
+        "price": -200
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e11",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-21T20:30:00Z",
+  "home_team": "Arnold Allen",
+  "away_team": "Trevor Peek",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Arnold Allen",
+        "price": -110
+       },
+       {
+        "name": "Trevor Peek",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_b",
+    "title": "Made Up bk_b",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Arnold Allen",
+        "price": -200
+       },
+       {
+        "name": "Trevor Peek",
+        "price": 150
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_c",
+    "title": "Made Up bk_c",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Arnold Allen",
+        "price": -300
+       },
+       {
+        "name": "Trevor Peek",
+        "price": 250
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_d",
+    "title": "Made Up bk_d",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Arnold Allen",
+        "price": -110
+       },
+       {
+        "name": "Trevor Peek",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e12",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-21T21:00:00Z",
+  "home_team": "Chris Padilla",
+  "away_team": "Magomed Zaynukov",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Chris Padilla",
+        "price": -300
+       },
+       {
+        "name": "Magomed Zaynukov",
+        "price": -300
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_b",
+    "title": "Made Up bk_b",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Chris Padilla",
+        "price": -110
+       },
+       {
+        "name": "Magomed Zaynukov",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_c",
+    "title": "Made Up bk_c",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Chris Padilla",
+        "price": 120
+       },
+       {
+        "name": "Magomed Zaynukov",
+        "price": 120
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e13",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-21T21:30:00Z",
+  "home_team": "Jiri Prochazka",
+  "away_team": "Billy Elekana",
+  "bookmakers": []
+ },
+ {
+  "id": "e14",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-22T02:30:00Z",
+  "home_team": "Casey O'Neill",
+  "away_team": "Valentina Shevchenko",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Casey O'Neill",
+        "price": 150
+       },
+       {
+        "name": "Valentina Shevchenko",
+        "price": -200
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_b",
+    "title": "Made Up bk_b",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Casey O'Neill",
+        "price": 140
+       },
+       {
+        "name": "Valentina Shevchenko",
+        "price": -170
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e15",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-22T01:15:00Z",
+  "home_team": "Cesar Almeida",
+  "away_team": "Vlasto Cepo",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Cesar Almeida",
+        "price": -150
+       },
+       {
+        "name": "Vlasto Cepo",
+        "price": 130
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "key": "bk_b",
+    "title": "Made Up bk_b",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Vlasto Cepo",
+        "price": -150
+       },
+       {
+        "name": "Cesar Almeida",
+        "price": 130
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e16",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-21T19:00:00Z",
+  "home_team": "Dustin Poirer",
+  "away_team": "Mark Choinski",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Dustin Poirer",
+        "price": -110
+       },
+       {
+        "name": "Mark Choinski",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e17",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-21T19:30:00Z",
+  "home_team": "Bruno Silva",
+  "away_team": "Jack Hermansson",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Bruno Silva",
+        "price": -110
+       },
+       {
+        "name": "Jack Hermansson",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e18",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-21T22:00:00Z",
+  "home_team": "Zhang Weili",
+  "away_team": "zhang  weili",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Zhang Weili",
+        "price": -110
+       },
+       {
+        "name": "zhang  weili",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e19",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-21T22:30:00Z",
+  "home_team": "Irina Alekseeva",
+  "away_team": "Daria Zhelezniakova",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Irina Alekseeva",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e20",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-21T18:00:00Z",
+  "home_team": "Madeup Bantam",
+  "away_team": "Another Madeup",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Madeup Bantam",
+        "price": -110
+       },
+       {
+        "name": "Another Madeup",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e21",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-22T05:00:00Z",
+  "home_team": "Madeup Heavy",
+  "away_team": "Other Madeup",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Madeup Heavy",
+        "price": 100
+       },
+       {
+        "name": "Other Madeup",
+        "price": -120
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e30",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-27T22:00:00Z",
+  "home_team": "Henry Cejudo",
+  "away_team": "Angel Pacheco",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Henry Cejudo",
+        "price": -110
+       },
+       {
+        "name": "Angel Pacheco",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e31",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-27T22:00:00Z",
+  "home_team": "Lukasz Brzeski",
+  "away_team": "Marcus Buchecha",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Lukasz Brzeski",
+        "price": 200
+       },
+       {
+        "name": "Marcus Buchecha",
+        "price": -250
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e32",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-27T22:00:00Z",
+  "home_team": "Vinicius Oliveira",
+  "away_team": "Michael Aswell Jr.",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Vinicius Oliveira",
+        "price": -150
+       },
+       {
+        "name": "Michael Aswell Jr.",
+        "price": 130
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e33",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-27T22:00:00Z",
+  "home_team": "Stephanie Luciano",
+  "away_team": "Vanessa Demopoulos",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Stephanie Luciano",
+        "price": 110
+       },
+       {
+        "name": "Vanessa Demopoulos",
+        "price": -130
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e34",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-11-27T22:00:00Z",
+  "home_team": "Xiong Jingnan",
+  "away_team": "Montserrat Conejo Ruiz",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Xiong Jingnan",
+        "price": -180
+       },
+       {
+        "name": "Montserrat Conejo Ruiz",
+        "price": 150
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "e40",
+  "sport_key": "mma_mixed_martial_arts",
+  "sport_title": "MMA (synthetic fixture, prices made up)",
+  "commence_time": "2026-12-05T22:00:00Z",
+  "home_team": "Uran Satybaldiev",
+  "away_team": "Volkan Oezdemir",
+  "bookmakers": [
+   {
+    "key": "bk_a",
+    "title": "Made Up bk_a",
+    "last_update": "2026-11-18T11:55:00Z",
+    "markets": [
+     {
+      "key": "h2h",
+      "last_update": "2026-11-18T11:55:00Z",
+      "outcomes": [
+       {
+        "name": "Uran Satybaldiev",
+        "price": -110
+       },
+       {
+        "name": "Volkan Oezdemir",
+        "price": -110
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+]
