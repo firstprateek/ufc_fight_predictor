@@ -236,7 +236,7 @@ Source: GitHub `shortlikeafox/ultimate_ufc_dataset` (Apache-2.0), file `ufc-mast
 (7,177 fights from 2010-03-21 to 2026-03-28 at the pinned commit). Odds are American moneylines in
 `R_odds` and `B_odds`; the bookmaker and how close to the fight they were taken are not
 documented, so we call them "pre-fight moneyline, book and timing unknown". `ufc fetch` downloads the
-file at one upstream commit into `data/raw/odds/<sha>/` and records the sha (`--odds-sha` pins one);
+file at the head of `main` (or at `--odds-sha`) into `data/raw/odds/<sha>/` and records the sha;
 it is never committed. Only the five columns in principle 7 are read. Rows with a blank price on
 either side are skipped (about 250, mostly 2023-2024).
 

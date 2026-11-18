@@ -17,13 +17,10 @@ from .odds import OddsError, build_odds, validate_odds
 from .validate import ValidationError, load_tables, validate
 
 
-def t_fights(processed: Path) -> pd.DataFrame:
-    return pd.read_parquet(processed / "fights.parquet")
-
-
 def _build_odds(raw: Path, processed: Path, overrides: Path) -> None:
     snap = fetch_mod.latest_odds_snapshot(raw)
     if snap is None:
+        (processed / "odds.parquet").unlink(missing_ok=True)  # never leave a stale table
         print("odds: no odds snapshot (run `ufc fetch`); odds.parquet not built")
         return
     odds, rep = build_odds(snap, load_tables(processed), overrides / "odds_names.csv")
@@ -149,7 +146,9 @@ def main(argv: list[str] | None = None) -> int:
                 f"validation passed; fights without round stats: {rep['fights_without_round_stats']}"
             )
             if (processed / "odds.parquet").exists():
-                validate_odds(pd.read_parquet(processed / "odds.parquet"), t_fights(processed))
+                validate_odds(
+                    pd.read_parquet(processed / "odds.parquet"), load_tables(processed)["fights"]
+                )
                 print("odds validation passed")
     except (ValidationError, FileNotFoundError, PhysicalNullError, OddsError) as e:
         print(e, file=sys.stderr)

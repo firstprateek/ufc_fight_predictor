@@ -79,7 +79,7 @@ def load_aliases(path: Path | None) -> dict[str, str]:
 
 @dataclass
 class OddsReport:
-    source_rows: int = 0
+    usable_rows: int = 0  # source rows with a usable price on both sides
     source_total: int = 0
     source_without_odds: int = 0
     matched: int = 0
@@ -107,7 +107,7 @@ def match_odds(
     """Match cleaned odds rows to fights. Returns (rows, report, matched source row positions).
     Never guesses: a source row that fits no fight, or more than one, stays unmatched; a fight that
     two source rows claim is left unmatched for both."""
-    rep = OddsReport(source_rows=len(src))
+    rep = OddsReport(usable_rows=len(src))
     name_of = dict(zip(fighters.fighter_id, fighters.name, strict=True))
     f = fights[["fight_id", "date", "fighter_1_id", "fighter_2_id"]].copy()
     f["n1"] = f.fighter_1_id.map(name_of).map(normalise_name)
