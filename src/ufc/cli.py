@@ -11,6 +11,7 @@ import pandas as pd
 
 from . import fetch as fetch_mod
 from . import predict as predict_mod
+from . import score_log as score_mod
 from .backtest import LeakSuspected, run_backtest
 from .backtest.ablation import ablation_markdown, run_ablation
 from .backtest.protocol import DEV_END, FINAL_FEATURE_SET, HOLDOUT_START, ProtocolError
@@ -176,6 +177,15 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--id-2", help="fighter_id of the second name, if the name is shared")
     pr.add_argument("--json", action="store_true", help="print one JSON document")
     pr.add_argument("--log", action="store_true", help=f"append to {predict_mod.LOG_PATH}")
+    sl = sub.add_parser(
+        "score-log",
+        help="score the prediction log against what happened afterwards",
+        description="Match each logged prediction to the real fight and score the ones written "
+        "before it. Reads the log; never writes it.",
+    )
+    sl.add_argument("--log", type=Path, help=f"the log (default: {predict_mod.LOG_PATH})")
+    sl.add_argument("--json", action="store_true", help="print one JSON document")
+    sl.add_argument("--out", type=Path, help="also write the readable report to this file")
     args = ap.parse_args(argv)
     raw, processed = args.data_dir / "raw", args.data_dir / "processed"
 
@@ -272,6 +282,17 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
         elif args.cmd == "predict":
             _predict(args, raw, processed)
+        elif args.cmd == "score-log":
+            log = args.log or raw.parent.parent / predict_mod.LOG_PATH
+            doc = score_mod.run(log, processed)
+            if doc is None:
+                print(f"no predictions to score: {log} is missing or empty")
+                return 0
+            text = score_mod.render(doc)
+            print(score_mod.to_json(doc) if args.json else text, end="" if not args.json else "\n")
+            if args.out:
+                args.out.parent.mkdir(parents=True, exist_ok=True)
+                args.out.write_text(text)
         elif args.cmd == "backtest":
             t = load_tables(processed)
             feats = pd.read_parquet(processed / "features.parquet")
