@@ -1,0 +1,120 @@
+# agent-gate: passes leaf PRs at once. A PR is root if it touches a path owned in CODEOWNERS (read from
+# the base branch), anything under .github/ or docs/decisions/, a CODEOWNERS file, or carries the
+# tier:root label. A root PR passes only when it adds or edits a decision record in docs/decisions/
+# (dependency bots are exempt) and the owner added the owner-approved label after the PR's latest commit
+# was pushed. If the repo variable AGENT_GIT_WORKFLOW_CORE is "none", nothing is core: every PR passes
+# unless it carries tier:root, which marks a change the owner explicitly asked to approve. Agents act as
+# the owner, so the label is a promise agents keep, not a lock: the skill forbids
+# them to add it. Likewise a PR runs its own copy of this file, so only the same rule stops a root PR from
+# weakening the gate. Repo variable AGENT_GIT_WORKFLOW_OWNER (set by setup) names the owner. Read-only; no checkout;
+# no third-party actions.
+name: agent-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+permissions:
+  actions: read # when the head commit was pushed
+  contents: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: agent-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: agent-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      BASE: ${{ github.event.pull_request.base.sha }}
+      HEAD: ${{ github.event.pull_request.head.sha }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      AUTHOR: ${{ github.event.pull_request.user.login }}
+      OWNER: ${{ vars.AGENT_GIT_WORKFLOW_OWNER }}
+      CORE: ${{ vars.AGENT_GIT_WORKFLOW_CORE }}
+      OWNER_TYPE: ${{ github.event.repository.owner.type }}
+      REPO_OWNER: ${{ github.repository_owner }}
+    steps:
+      - name: Check tier and approval
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; echo "$1" >>"$GITHUB_STEP_SUMMARY"; exit 1; }
+          if [ -z "$OWNER" ]; then
+            [ "$OWNER_TYPE" = User ] || fail "Set the AGENT_GIT_WORKFLOW_OWNER repo variable to the owner's login."
+            OWNER=$REPO_OWNER
+          fi
+
+          labels=$(gh api "repos/$REPO/issues/$PR/labels" --jq '.[].name')
+          if [ "$CORE" = none ] && ! grep -qx 'tier:root' <<<"$labels"; then
+            echo "Nothing is core in this repo, and the owner didn't ask to approve this PR." >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # "status<TAB>path" for every path the PR touches, including a rename's old path.
+          changes=$(gh api "repos/$REPO/pulls/$PR/files" --paginate \
+            --jq '.[] | "\(.status)\t\(.filename)", (select(.previous_filename) | "removed\t\(.previous_filename)")')
+          paths=$(cut -f2 <<<"$changes")
+
+          co="" err=$(mktemp)
+          for p in .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS; do
+            if co=$(gh api "repos/$REPO/contents/$p?ref=$BASE" -H 'Accept: application/vnd.github.raw' 2>"$err"); then break; fi
+            co=""
+            grep -q 'HTTP 404' "$err" || { cat "$err" >&2; fail "GitHub API error while reading $p; rerun this job."; }
+          done
+
+          # Same matcher as the skill's tier.sh: each CODEOWNERS line tested on its own with git's
+          # matcher, last match wins, "dir/*" covers direct children only. Built-in root paths go last.
+          pat=$(mktemp) empty=$(mktemp -d)
+          git -C "$empty" init -q
+          matches=$(
+            { printf '%s\n' "$co" | awk '{ sub(/[[:space:]]+#.*/, "") } !/^[[:space:]]*(#|$)/ { print (NF > 1) " " $1 }'
+              printf '1 %s\n' /.github/ /docs/decisions/ /CODEOWNERS /docs/CODEOWNERS; } |
+            while read -r owned p; do
+              printf '%s\n' "$p" >"$pat"
+              printf '%s\n' "$paths" |
+                git -C "$empty" -c core.excludesFile="$pat" -c core.quotePath=false check-ignore --no-index --stdin |
+                awk -v o="$owned" -v p="$p" '
+                  BEGIN { star = (p ~ /\/\*$/); pre = p; sub(/^\//, "", pre); sub(/\*$/, "", pre) }
+                  { if (star && index($0, pre) == 1 && index(substr($0, length(pre) + 1), "/")) next
+                    print $0 "\t" o "\t" p }' || true
+            done |
+            awk -F'\t' '{ last[$1] = $2 "\t" $3 } END { for (f in last) { split(last[f], a, "\t"); if (a[1] == 1) print f " (" a[2] ")" } }' |
+            sort)
+
+          if [ -z "$matches" ] && ! grep -qx 'tier:root' <<<"$labels"; then
+            echo "Leaf change: no root paths touched." >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          { echo "Root change. Root paths touched:"; echo '```'; echo "${matches:-(none; labelled tier:root)}"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
+
+          case "$AUTHOR" in
+            'dependabot[bot]' | 'renovate[bot]') ;;
+            *) awk -F'\t' '$1 != "removed" && $2 ~ /^docs\/decisions\/.+\.md$/ { found = 1 } END { exit !found }' <<<"$changes" ||
+                 fail "Root change: add or edit a decision record in docs/decisions/ for the owner to review." ;;
+          esac
+
+          grep -qx 'owner-approved' <<<"$labels" || fail "Root change: waiting for @$OWNER to add the owner-approved label."
+          events=$(gh api "repos/$REPO/issues/$PR/events" --paginate --slurp)
+          labeled=$(jq -r --arg o "$OWNER" '
+            [.[][] | select(.event == "labeled" and .label.name == "owner-approved")] | last
+            | if . == null then "" elif .actor.login != $o then "not-owner" else .created_at end' <<<"$events")
+          [ "$labeled" != not-owner ] || fail "owner-approved was added by someone other than @$OWNER."
+          # When the head reached GitHub: the first workflow run for its commit, or the last force-push if
+          # later (a force-push back to an older commit). The commit's own date is set on the agent's
+          # machine, so it can predate the label even if the push came after.
+          # Only runs for this PR's branch count: a commit can have older runs from another branch.
+          first_run=$(gh api "repos/$REPO/actions/runs?head_sha=$HEAD&event=pull_request&per_page=100" --paginate \
+            --jq ".workflow_runs[] | select(.head_branch == env.HEAD_REF) | .created_at" | sort | head -n 1)
+          [ -n "$first_run" ] || fail "Couldn't tell when the latest commit was pushed; rerun this job."
+          forced=$(jq -r '[.[][] | select(.event == "head_ref_force_pushed") | .created_at] | max // ""' <<<"$events")
+          arrived=$(printf '%s\n%s\n' "$first_run" "$forced" | sort | tail -n 1)
+          [[ "$labeled" > "$arrived" ]] ||
+            fail "New commits after approval: @$OWNER needs to remove and re-add owner-approved."
+          echo "Approved by @$OWNER." >>"$GITHUB_STEP_SUMMARY"
