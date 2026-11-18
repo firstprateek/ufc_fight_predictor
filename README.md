@@ -20,7 +20,7 @@ features and the same `blend` model as the backtest, trained on every decided fi
 ids (`--id-1`, `--id-2`). `--json` prints the same content as JSON; `--log` appends to the gitignored
 `predictions/log.csv` for scoring later. Over the 5,179 past fights with odds the market was the better
 estimate (log loss 0.6092 against 0.6474), so the market is the better estimate when the two
-disagree. Real output, as the model saw the 2026-11-14 title fight the day before it (`--date`
+disagree. The weight class, rounds and title flag describe the bout; in a check on 30 fights the current model's probability did not change with them. Real output, as the model saw the 2026-11-14 title fight the day before it (`--date`
 before a fight ignores that fight and everything after it):
 
 ```

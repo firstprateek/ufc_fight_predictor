@@ -101,8 +101,9 @@ def _predict(args, raw: Path, processed: Path) -> None:
     doc = predict_mod.run(requests, t, snap)
     print(predict_mod.to_json(doc) if args.json else predict_mod.render(doc))
     if args.log:
-        n = predict_mod.append_log(predict_mod.LOG_PATH, doc)
-        print(f"logged {n} fight(s) to {predict_mod.LOG_PATH}", file=sys.stderr)
+        log = raw.parent.parent / predict_mod.LOG_PATH  # next to the data directory
+        n = predict_mod.append_log(log, doc)
+        print(f"logged {n} fight(s) to {log}", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:

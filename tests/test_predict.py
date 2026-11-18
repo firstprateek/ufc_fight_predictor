@@ -53,6 +53,7 @@ def world():
         ignore_index=True,
     )
     fighters.loc[fighters.fighter_id == "f05", "reach_cm"] = np.nan  # a filled-in snapshot field
+    fighters.loc[fighters.fighter_id == "f06", "dob"] = None  # age is imputed from the fight dates
     gone = ((fights.fighter_1_id == "f23") | (fights.fighter_2_id == "f23")) & (
         fights.date > "2013-01-01"
     )
@@ -155,7 +156,19 @@ def test_replay_reproduces_the_walk_forward_prediction(world):
     feats = build_features(fights, stats, fighters)
     pred = walk_forward(scored_fights(feats, fights), "2015-01-01", groups=GROUPS)
     fx = fights.set_index("fight_id")
-    for i in (0, len(pred) // 3, len(pred) // 2, len(pred) - 1):
+    gap = ["f05", "f06"]  # f05 has no reach, f06 no date of birth (its age is the imputed median)
+    mine = fights[fights.fighter_1_id.isin(gap) | fights.fighter_2_id.isin(gap)]
+    with_imputed = pred.index[pred.fight_id.isin(mine.fight_id)]
+    assert len(with_imputed) > 3  # a fighter with a filled-in field: the imputation must match too
+    for i in (
+        0,
+        len(pred) // 3,
+        len(pred) // 2,
+        len(pred) - 1,
+        with_imputed[0],
+        with_imputed[len(with_imputed) // 2],
+        with_imputed[-1],
+    ):
         row = pred.iloc[i]
         x = fx.loc[row.fight_id]
         r = req(tables, x.fighter_1_id, x.fighter_2_id, date=x.date, weight_class=x.weight_class)
@@ -303,8 +316,8 @@ def test_stale_data_warning(world):
     far = (date.fromisoformat(latest) + timedelta(days=15)).isoformat()
     near = (date.fromisoformat(latest) + timedelta(days=14)).isoformat()
     r = req(tables, "f00", "f01", weight_class="Lightweight")
-    assert "15 days before" in P.run([r], tables, "s", far)["warnings"][0]
-    assert P.run([r], tables, "s", near)["warnings"] == []
+    assert any("15 days before" in w for w in P.run([r], tables, "s", far)["warnings"])
+    assert [w for w in P.run([r], tables, "s", near)["warnings"] if "latest fight" in w] == []
     doc = P.run([r], tables, "snapsha", far)
     assert "ufc fetch && ufc build" in P.render(doc)
     assert "WARNING" in P.render(doc) and "snapsha" in P.render(doc) and latest in P.render(doc)
@@ -441,3 +454,77 @@ def test_cli_single_fight_card_json_and_log(world, tmp_path, monkeypatch, capsys
     assert main(base + ["--card", str(card), n[a]]) == 1
     assert main(base + [n[a], n[b], "--date", "01/02/2026"]) == 1
     assert "YYYY-MM-DD" in capsys.readouterr().err
+
+
+# -------------------------------------------------------------- review additions
+
+
+def test_a_fight_on_the_same_day_is_not_seen_by_features_or_training(world):
+    tables, day = world
+    a, b, c, d = lightweights(*world)[:4]
+    base = P.run([req(tables, a, b)], tables, "s", day)
+    extra = tables["fights"].iloc[[-1]].copy()
+    extra[["fight_id", "date", "fighter_1_id", "fighter_2_id", "winner_id"]] = [
+        "same-day", day, min(a, c), max(a, c), a,
+    ]  # fmt: skip
+    t2 = {**tables, "fights": pd.concat([tables["fights"], extra], ignore_index=True)}
+    got = P.run([req(t2, a, b)], t2, "s", day)
+    assert (
+        got["fights"][0]["fighter_1"]["ufc_fights"] == base["fights"][0]["fighter_1"]["ufc_fights"]
+    )
+    assert got["fights"][0]["fights_trained_on"] == base["fights"][0]["fights_trained_on"]
+    assert (
+        got["fights"][0]["probabilities_fighter_1"] == base["fights"][0]["probabilities_fighter_1"]
+    )
+    # a day later the same fight is history
+    later = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+    after = P.run([req(t2, a, b)], t2, "s", later)
+    assert (
+        after["fights"][0]["fighter_1"]["ufc_fights"]
+        == base["fights"][0]["fighter_1"]["ufc_fights"] + 1
+    )
+
+
+def test_fights_trained_on_counts_unflagged_decided_fights_before_the_date(world):
+    tables, day = world
+    f, fighters = tables["fights"], tables["fighters"]
+    feats = build_features(f, tables["fight_stats_round"], fighters)
+    s = scored_fights(feats, f)
+    s = s[s.date < day]
+    expected = int((~(s.f1_snapshot_imputed | s.f2_snapshot_imputed)).sum())
+    r = one(world, "f00", "f01", weight_class="Lightweight")
+    assert r["fights_trained_on"] == expected < len(s)
+
+
+def test_orientation_guard_refuses_an_asymmetric_fit(world, monkeypatch):
+    tables, day = world
+
+    def skewed(train, y, test, groups=()):
+        n = len(test)
+        return {k: np.full(n, 0.6) for k in ("hgb", "logreg", "blend")}
+
+    monkeypatch.setattr(P, "fit_predict", skewed)
+    with pytest.raises(P.LeakSuspected, match="swapping fighters"):
+        P.run([req(tables, "f00", "f01", weight_class="Lightweight")], tables, "s", day)
+
+
+def test_warnings_for_a_repeated_fighter_and_few_training_fights(world, monkeypatch):
+    tables, day = world
+    monkeypatch.setattr(P, "FEW_TRAINING", 100)
+    a, b, c = lightweights(*world)[:3]
+    doc = P.run([req(tables, a, b), req(tables, b, c)], tables, "s", day)
+    assert any("is in more than one fight" in w for w in doc["warnings"])
+    assert not any("unreliable" in w for w in doc["warnings"])
+    early = tables["fights"].date.iloc[30]
+    doc = P.run([req(tables, "f00", "f01", weight_class="Lightweight")], tables, "s", early)
+    assert any("unreliable" in w for w in doc["warnings"])
+
+
+def test_log_does_not_glue_onto_an_unterminated_last_line(world, tmp_path):
+    tables, day = world
+    path = tmp_path / "log.csv"
+    doc = P.run([req(tables, "f00", "f01", weight_class="Lightweight")], tables, "s", day)
+    P.append_log(path, doc, commit="c1")
+    path.write_bytes(path.read_bytes().rstrip(b"\n"))
+    P.append_log(path, doc, commit="c2")
+    assert [r["code_commit"] for r in csv.DictReader(path.open())] == ["c1", "c2"]

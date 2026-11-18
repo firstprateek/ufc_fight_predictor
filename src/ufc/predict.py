@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .backtest.models import fit_predict, flagged
+from .backtest.models import LeakSuspected, fit_predict, flagged
 from .backtest.protocol import FINAL_FEATURE_SET
 from .backtest.run import scored_fights
 from .features import (
@@ -30,6 +30,7 @@ from .features import (
     check_physical,
     fit_imputation,
     parse_feature_set,
+    swap_orientation,
 )
 from .odds import OVERROUND_RANGE, remove_margin
 
@@ -67,6 +68,7 @@ CARD_OPTIONAL = [
 FEW_FIGHTS = 3
 LAYOFF_DAYS = 730
 STALE_DAYS = 14
+FEW_TRAINING = 1000  # below this many training fights a warning is added
 # From docs/results/ratings.md, "Against the market", full period, `all` features, `blend`.
 MARKET_NOTE = (
     "Over 5,179 past fights the market's log loss was 0.6092 against 0.6474 for this model, "
@@ -469,7 +471,14 @@ def predict_matchups(
         y = train.y.to_numpy()[keep]
         if len(y) == 0 or y.min() == y.max():
             raise PredictError(f"too few decided fights before {cutoff} to fit a model")
+        assert train.empty or train.date.max() < min(cutoff, day), "training must precede the fight"
+        if not swap_orientation(swap_orientation(test)).equals(test):
+            raise LeakSuspected("swap_orientation is not an involution")
         p = fit_predict(train, train.y.to_numpy(), test, groups)
+        p_swapped = fit_predict(train, train.y.to_numpy(), swap_orientation(test), groups)
+        for name in ("hgb", "logreg"):  # the backtest's orientation guard
+            if not np.allclose(p[name] + p_swapped[name], 1.0, atol=1e-9):
+                raise LeakSuspected(f"{name}: swapping fighters did not give 1 - p")
         for k, (i, m) in enumerate(zip(idx, group, strict=True)):
             row = test.iloc[k]
             first = row.fighter_1_id == m.id1  # internal fighter 1 is the first-typed fighter
@@ -521,6 +530,18 @@ def run(
             warnings.append(
                 f"The latest fight in the data is {latest}, {gap} days before {d}: fights since "
                 "then are missing. `ufc fetch && ufc build` refreshes the data."
+            )
+    seen: dict[tuple[str, str], int] = {}
+    for m in matchups:
+        for fid, nm in ((m.id1, m.name1), (m.id2, m.name2)):
+            seen[(m.date, fid)] = seen.get((m.date, fid), 0) + 1
+            if seen[(m.date, fid)] == 2:
+                warnings.append(f"{nm} is in more than one fight on {m.date}: check for a typo.")
+    for d in sorted({f["date"] for f in fights}):
+        n = min(f["fights_trained_on"] for f in fights if f["date"] == d)
+        if n < FEW_TRAINING:
+            warnings.append(
+                f"Only {n} fights before {d} to train on: the probabilities are unreliable."
             )
     return {
         "fights": fights,
@@ -632,7 +653,7 @@ def code_commit() -> str:
             ["git", "rev-parse", "HEAD"], cwd=here, capture_output=True, text=True, check=True
         ).stdout.strip()
         dirty = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=no"],
+            ["git", "status", "--porcelain"],
             cwd=here,
             capture_output=True,
             text=True,
@@ -660,7 +681,10 @@ def append_log(
     else:
         fresh = True
     path.parent.mkdir(parents=True, exist_ok=True)
+    glued = not fresh and not path.read_bytes().endswith(b"\n")
     with path.open("a", newline="") as fh:
+        if glued:  # an unterminated last line must not swallow the first new row
+            fh.write("\n")
         w = csv.writer(fh)
         if fresh:
             w.writerow(LOG_COLUMNS)

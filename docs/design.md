@@ -423,11 +423,17 @@ after it). The imputation constants are fitted on the real tables and passed in,
 move them. Several fights on one card are appended together; each is featurised from the state before
 the date, as same-date fights already are. There is no second feature implementation.
 
-**Point in time.** `--date` defaults to today. Fights dated on or after it are dropped before anything is
-built, and the models train on the decided fights before it (`backtest.models.fit_predict`, the one
-function that fits `hgb` and the logistic regression for both the backtest and `predict`: same
-hyperparameters, both orientations, snapshot-imputed fights left out, same leak guards) with the frozen
-feature set. A date earlier than some fights in the data is allowed and ignores them. The headline is
+**Point in time.** `--date` defaults to today. Fights dated on or after it are dropped before the
+features are built, and the models train on the decided fights before it (`backtest.models.fit_predict`,
+the one function that fits `hgb` and the logistic regression for both the backtest and `predict`: same
+hyperparameters, both orientations, snapshot-imputed fights left out, and the guards inside the models)
+with the frozen feature set. `predict` also runs the backtest's other guards: `swap_orientation` is an
+involution, training dates precede the cutoff, and swapping the fighters gives `1 - p` for `hgb` and the
+logistic regression (a second fit, so a call takes a little longer). A date earlier than some fights in
+the data is allowed and ignores them. As in the training build, the imputation constants and the
+`fighters` snapshot (principle 6, "Known limitation" under Features) come from the full tables, so a
+backdated `--date` is point in time for results and history but not for those; this is what makes the
+replay test exact. A warning is added when fewer than 1,000 fights are available to train on. The headline is
 `blend`; `--json` also has the `hgb` and logistic-regression probabilities. Internally
 `fighter_1_id < fighter_2_id`; the output follows the order the names were typed.
 
@@ -443,6 +449,10 @@ several fighters fails listing each one's `fighter_id`, UFC record, last fight a
 no UFC fight is allowed (note: UFC debut). The same fighter on both sides is an error. Weight class: the
 class both fighters last fought in when it is the same, otherwise required. Rounds 3; `--title` means 5
 (and is an error with `--rounds 3`). Gender comes from the fighters' past fights, else the weight class.
+The class, rounds and title flag are inputs of the feature set (`ctx_*`), but with the current frozen
+model they did not change the probability in a check on 30 fights (the fitted `hgb` does not split on
+them and the logistic regression does not take them), so they describe the bout rather than move the
+number; this is the model's behaviour, not something `predict` adds.
 
 **Output.** Per fight: the names, date, class and rounds; the `blend` probability and its fair American
 price for each fighter; the inputs side by side (UFC record, prior fights, last fight and days since, age,
@@ -454,9 +464,9 @@ they disagree. It never prints advice, a stake or a "value" label. The footer gi
 the date of the latest fight, the number of fights trained on, and a warning when the latest fight is more
 than 14 days before `--date`.
 
-**Log.** `--log` appends one row per fight to `predictions/log.csv` (gitignored); rows are only appended,
+**Log.** `--log` appends one row per fight to `predictions/log.csv` next to the data directory (gitignored); rows are only appended,
 and a file with another header is refused, never rewritten. Columns: `run_utc`, `data_snapshot`,
-`code_commit` (`-dirty` if the working tree had uncommitted changes), `fighter_1_id`, `fighter_1_name`,
+`code_commit` (`-dirty` if `git status` shows any change, tracked or not), `fighter_1_id`, `fighter_1_name`,
 `fighter_2_id`, `fighter_2_name`, `date`, `weight_class`, `scheduled_rounds`, `is_title`, `p_blend_1`,
 `p_hgb_1`, `p_logreg_1` (all for the first-typed fighter) and `odds_1`, `odds_2` (empty when not given).
 Scoring the log against results is not built.
