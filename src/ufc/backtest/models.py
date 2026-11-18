@@ -15,7 +15,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from ..features import FLAG, feature_columns, swap_orientation
+from ..features import FLAG, LOGREG_EXTRA, feature_columns, swap_orientation
 
 
 class LeakSuspected(Exception):
@@ -72,6 +72,11 @@ def elo_expected(train, y, test) -> np.ndarray:
     return 1.0 / (1.0 + 10.0 ** (-test["diff_elo"].to_numpy(dtype=float) / 400.0))
 
 
+def logreg_inputs(groups: tuple[str, ...] = ()) -> list[str]:
+    """Logistic-regression columns: the base inputs plus the extras of every group that is on."""
+    return [*LOGREG_DIFFS, *(c for g in groups for c in LOGREG_EXTRA[g])]
+
+
 def _logreg_matrix(df: pd.DataFrame, extra=()) -> np.ndarray:
     cols = [*LOGREG_DIFFS, *extra]
     _guard_columns(cols)
@@ -98,7 +103,17 @@ def _symmetric(make, matrix):
     return run
 
 
+def make_logistic_regression(groups: tuple[str, ...] = ()):
+    """Logistic regression on its base inputs plus the extras of the feature groups that are on."""
+    extra = logreg_inputs(groups)[len(LOGREG_DIFFS) :]
+    return lambda train, y, test: _logistic_regression(train, y, test, extra)
+
+
 def logistic_regression(train, y, test) -> np.ndarray:
+    return _logistic_regression(train, y, test, ())
+
+
+def _logistic_regression(train, y, test, extra) -> np.ndarray:
     train, y = _training_set(train, y)
 
     def make():
@@ -111,13 +126,22 @@ def logistic_regression(train, y, test) -> np.ndarray:
             LogisticRegression(C=LOGREG_C, max_iter=1000),
         )
 
-    return _symmetric(make, _logreg_matrix)(train, y, test)
+    return _symmetric(make, lambda d: _logreg_matrix(d, extra))(train, y, test)
+
+
+def make_gradient_boosting(groups: tuple[str, ...] = ()):
+    """`hgb` on every numeric column of the feature set (base plus the groups that are on)."""
+    return lambda train, y, test: _gradient_boosting(train, y, test, groups)
 
 
 def gradient_boosting(train, y, test) -> np.ndarray:
+    return _gradient_boosting(train, y, test, ())
+
+
+def _gradient_boosting(train, y, test, groups) -> np.ndarray:
     train, y = _training_set(train, y)
     # columns with fewer than two distinct training values carry no signal (and trip sklearn's binning)
-    cols = [c for c in feature_columns(train) if train[c].astype(float).nunique() >= 2]
+    cols = [c for c in feature_columns(train, groups) if train[c].astype(float).nunique() >= 2]
 
     _guard_columns(cols)
 
@@ -140,3 +164,33 @@ MODELS = {
     "logreg": logistic_regression,
     "hgb": gradient_boosting,
 }
+
+
+def models_for(groups: tuple[str, ...] = ()) -> dict:
+    """The models for a feature set. The base set is `MODELS` itself (looked up at call time); a
+    larger set swaps in `logreg` and `hgb` with the extra columns. `blend` is not a model here: it is
+    the mean of the logits of `hgb` and `logreg`, taken on their predictions (see `blend`)."""
+    if not groups:
+        return dict(MODELS)
+    return {
+        **MODELS,
+        "logreg": make_logistic_regression(groups),
+        "hgb": make_gradient_boosting(groups),
+    }
+
+
+def blend(p_hgb, p_logreg) -> np.ndarray:
+    """`blend`: the mean of the logits of `hgb` and logistic regression. Swapping the fighters gives
+    1 - p, as for both inputs."""
+    z = (_logit(p_hgb) + _logit(p_logreg)) / 2.0
+    return 1.0 / (1.0 + np.exp(-z))
+
+
+def _logit(p) -> np.ndarray:
+    p = np.clip(np.asarray(p, float), 1e-12, 1 - 1e-12)
+    return np.log(p / (1 - p))
+
+
+def model_names(pred: pd.DataFrame) -> list[str]:
+    """The models with a `p_<name>` column in a prediction table, in report order (`blend` last)."""
+    return [m for m in (*MODELS, "blend") if f"p_{m}" in pred.columns]

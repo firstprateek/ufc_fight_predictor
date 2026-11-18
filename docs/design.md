@@ -47,6 +47,16 @@ The 2018 class project is kept under `legacy/2018/` for history only. Nothing in
    result-derived columns. `odds.load_odds_source` reads only `R_fighter`, `B_fighter`, `R_odds`,
    `B_odds` and `date` (pandas `usecols`), and a test enforces it. Nothing else from that file may
    be loaded, however convenient: a result column next to the prices is a leak waiting to happen.
+8. **Choices are made on development data only.** The test period is split: **development** is
+   2015-01-01 to 2022-12-31, **holdout** is 2023-01-01 to the latest fight. Every choice (which
+   feature groups to keep, anything else) is made on development numbers. The holdout is run once for a
+   new configuration, after that configuration is frozen in a commit; the results file names the
+   commit. Rating hyperparameters are tuned only on fights dated before 2015-01-01 and never on the
+   test period. The rule for the final configuration is written before the numbers exist (see
+   "Evaluation protocol" below), and the protocol is not adjusted after seeing results. Code backs this
+   up: `ufc backtest --end` drops every later fight before anything is fitted, and
+   `backtest/protocol.py` refuses to run a feature set that is not the frozen one (or `base`) past
+   2022-12-31.
 
 ## Layout
 
@@ -226,6 +236,28 @@ fails); and a tripwire: if any model's overall accuracy exceeds 75% the report i
 exits non-zero and says a leak is likely. Real accuracy is expected around 55-65%. The tripwire only
 catches gross leaks (a subtle one would sit under 75%); the real protection is the point-in-time
 construction, the truncation check (a 200-fight sample) and the tests that flip later labels and results.
+
+### Evaluation protocol (`ufc backtest --end`, `--features-set`, `--ablation`)
+
+- `ufc backtest --end YYYY-MM-DD` ends the test period at that date. Fights after it are dropped before
+  fitting, so nothing later can influence a result (tested by changing later labels and features).
+- `ufc backtest --features-set <set>` runs a feature set: `base` (the features above), `ratings`,
+  `adjusted`, `context` (each is `base` plus that group), `all`, or a join such as `ratings+adjusted`.
+  A column belongs to a group by name (`glicko_*` and `welo`; `adj_*`; `ctx_*`). For a set, `hgb` uses
+  every numeric column of the set; logistic regression uses its base inputs plus `diff_glicko_r` and
+  `diff_welo` (ratings) and the five `diff_adj_<dimension>_exp` expected differentials (adjusted).
+  Hyperparameters of `hgb` and logistic regression do not change.
+- `blend` is the mean of the logits of `hgb` and logistic regression (a prediction-level average, no
+  extra fit); it has its own row in the tables and its own information test.
+- `ufc backtest --ablation` runs `base`, `ratings`, `adjusted`, `context` and `all` on the development
+  period and applies the pre-registered rule: the final configuration is `all`, minus any group whose
+  `hgb` development log loss, as the set `base` plus that group, is worse than `base` with a
+  paired-bootstrap 95% interval (events resampled, 1,000 draws) that excludes zero. No other
+  selection. (The rule compares each group with `base` rather than `all` with `all` minus the group:
+  that is what the ablation table shows, fixed before any number existed.)
+- Until a commit freezes the configuration (`FINAL_FEATURE_SET` in `backtest/protocol.py`), only `base`
+  may run past `--end 2022-12-31`; afterwards only `base` and the frozen set may. A feature set
+  whose columns are not in `features.parquet` does not run.
 
 ## Milestone 3: market odds
 

@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 from . import metrics as M
-from .models import MODELS, market
+from .models import market, model_names
 
 MARKET = "market"
 STACK_START = "2016-01-01"  # 2015 is burn-in for the stacked model
@@ -30,29 +30,30 @@ def logit(p) -> np.ndarray:
     return np.log(p / (1 - p))
 
 
-def fit_stack(p_market, p_hgb, y) -> LogisticRegression:
+def fit_stack(p_market, p_model, y) -> LogisticRegression:
     """Two inputs (logit market, logit hgb), no intercept, both orientations of every fight, no
     penalty: the answer cannot depend on which fighter is listed first."""
-    x = np.column_stack([logit(p_market), logit(p_hgb)])
+    x = np.column_stack([logit(p_market), logit(p_model)])
     xx = np.vstack([x, -x])
     yy = np.concatenate([np.asarray(y), 1 - np.asarray(y)])
     return LogisticRegression(fit_intercept=False, C=np.inf, max_iter=1000).fit(xx, yy)
 
 
-def stacked_walk_forward(sub: pd.DataFrame, start: str = STACK_START):
-    """Each quarter from `start`: fit the stack on out-of-sample predictions of earlier quarters
-    (fights with odds), predict the quarter. Returns (rows, last_quarter_coefficients)."""
+def stacked_walk_forward(sub: pd.DataFrame, start: str = STACK_START, model: str = "hgb"):
+    """Each quarter from `start`: fit the stack of the market and `model` on out-of-sample
+    predictions of earlier quarters (fights with odds), predict the quarter. Returns (rows,
+    last_quarter_coefficients, last quarter)."""
     parts, coef, last = [], None, None
     for q in sorted(set(sub.quarter[sub.date >= start])):
         train, test = sub[sub.quarter < q], sub[sub.quarter == q]
         assert train.quarter.max() < q, "stack must train on earlier quarters only"
-        model = fit_stack(train.p_market, train.p_hgb, train.y)
-        x = np.column_stack([logit(test.p_market), logit(test.p_hgb)])
-        p = model.predict_proba(x)[:, 1]
-        p_swapped = model.predict_proba(-x)[:, 1]
+        fit = fit_stack(train.p_market, train[f"p_{model}"], train.y)
+        x = np.column_stack([logit(test.p_market), logit(test[f"p_{model}"])])
+        p = fit.predict_proba(x)[:, 1]
+        p_swapped = fit.predict_proba(-x)[:, 1]
         assert np.allclose(p + p_swapped, 1.0, atol=1e-9)
         parts.append(test.assign(p_stack=p))
-        coef, last = model.coef_[0], q
+        coef, last = fit.coef_[0], q
     if not parts:
         return sub.iloc[0:0].assign(p_stack=[]), None, None
     return pd.concat(parts), coef, last
@@ -79,12 +80,12 @@ def market_subset(pred: pd.DataFrame) -> pd.DataFrame:
 
 def market_summary(sub: pd.DataFrame) -> dict:
     """Overall scores per model (and the market) on the odds fights."""
-    return {m: M.summarize(sub[f"p_{m}"], sub.y) for m in [*MODELS, MARKET]}
+    return {m: M.summarize(sub[f"p_{m}"], sub.y) for m in [*model_names(sub), MARKET]}
 
 
 def market_markdown(pred: pd.DataFrame, n_scored: int) -> str:
     sub = market_subset(pred)
-    names = [*MODELS, MARKET]
+    names = [*model_names(sub), MARKET]
     overall = market_summary(sub)
     ev, y = sub.event_id.to_numpy(), sub.y.to_numpy()
     loss = {m: M.point_losses(sub[f"p_{m}"].to_numpy(), y) for m in names}
@@ -112,7 +113,7 @@ def market_markdown(pred: pd.DataFrame, n_scored: int) -> str:
         "",
     ]
     rows = []
-    for m in MODELS:
+    for m in model_names(sub):
         d, lo, hi = M.paired_bootstrap(loss[m], loss[MARKET], ev, BOOTSTRAP_DRAWS)
         rows.append([m, f"{d:+.4f}", f"[{lo:+.4f}, {hi:+.4f}]"])
     md += [_table(rows, ["model", "difference", "95% interval"]), ""]
@@ -132,17 +133,18 @@ def market_markdown(pred: pd.DataFrame, n_scored: int) -> str:
         for m in names:
             rows.append([yr, m, *_fmt(M.summarize(g[f"p_{m}"], g.y))])
     md += [_table(rows, ["year", "model", "fights", "log loss", "Brier", "accuracy", "ECE"]), ""]
-    md += information_test_markdown(sub)
+    for m in ("hgb", "blend"):
+        md += information_test_markdown(sub, m)
     return "\n".join(md)
 
 
-def information_test_markdown(sub: pd.DataFrame) -> list[str]:
-    st, coef, last = stacked_walk_forward(sub)
+def information_test_markdown(sub: pd.DataFrame, model: str = "hgb") -> list[str]:
+    st, coef, last = stacked_walk_forward(sub, model=model)
     md = [
-        "### Information test: does `hgb` know anything the market does not?",
+        f"### Information test: does `{model}` know anything the market does not?",
         "",
         "Each quarter a logistic regression with two inputs, logit of the market probability and logit "
-        "of the `hgb` prediction (no intercept, both orientations, no penalty), is fitted on the "
+        f"of the `{model}` prediction (no intercept, both orientations, no penalty), is fitted on the "
         "out-of-sample predictions of earlier quarters only (fights with odds; 2015 is burn-in), then "
         f"predicts the quarter. Scored from {STACK_START} on the same fights as the market alone.",
         "",
@@ -156,7 +158,7 @@ def information_test_markdown(sub: pd.DataFrame) -> list[str]:
     a, b = M.summarize(st.p_market, y), M.summarize(st.p_stack, y)
     md += [
         _table(
-            [["market alone", *_fmt(a)], ["market + hgb stack", *_fmt(b)]],
+            [["market alone", *_fmt(a)], [f"market + {model} stack", *_fmt(b)]],
             ["model", "fights", "log loss", "Brier", "accuracy", "ECE"],
         ),
         "",
@@ -165,7 +167,7 @@ def information_test_markdown(sub: pd.DataFrame) -> list[str]:
         "information the market lacks; an interval that includes zero means no evidence that it does.",
         "",
         f"Coefficients of the final quarter's fit ({last}): market logit {coef[0]:.3f}, "
-        f"hgb logit {coef[1]:.3f}.",
+        f"{model} logit {coef[1]:.3f}.",
         "",
     ]
     return md
