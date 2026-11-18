@@ -181,11 +181,28 @@ def test_missing_snapshot_fields_leave_no_trace_in_the_row():
         h, h * imp.reach_ratio, imp.stance, str(pd.Timestamp("2020-02-01") - pd.Timedelta(days=10000))[:10],
     ]  # fmt: skip
     b = build_features(fights, stats, filled, imp)
-    pd.testing.assert_frame_equal(a, b)
+    flags = ["f1_snapshot_imputed", "f2_snapshot_imputed"]  # the one column that may differ
+    assert a.f2_snapshot_imputed[0] and not b.f2_snapshot_imputed[0]
+    pd.testing.assert_frame_equal(a.drop(columns=flags), b.drop(columns=flags))
     assert a.f2_height_cm[0] == h and a.f2_stance[0] == "Orthodox"
     # whole fixture: no physical null anywhere, and the rest of C's rows is the same
     full = build_features(FIGHTS, STATS, bare, imp)
     check_physical(full)
+
+
+def test_snapshot_imputed_flags():
+    df = build_features(FIGHTS, STATS, FIGHTERS)
+    assert df.f1_snapshot_imputed.dtype == bool and df.f2_snapshot_imputed.dtype == bool
+    by = df.set_index("fight_id")
+    # A is complete; B lacks reach and dob; C lacks height and stance
+    assert not by.loc["f1", "f1_snapshot_imputed"] and by.loc["f1", "f2_snapshot_imputed"]
+    assert by.loc["f2", "f2_snapshot_imputed"]
+    assert not any(c.startswith("diff_") and "snapshot_imputed" in c for c in df.columns)
+    assert not any("snapshot_imputed" in c for c in feature_columns(df))
+    sw = swap_orientation(df)
+    assert (sw.f1_snapshot_imputed == df.f2_snapshot_imputed).all()
+    nofighter = FIGHTERS[FIGHTERS.fighter_id != "A"]
+    assert build_features(FIGHTS, STATS, nofighter).f1_snapshot_imputed[0]
 
 
 def test_physical_null_guard():

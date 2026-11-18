@@ -15,7 +15,32 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from ..features import feature_columns, swap_orientation
+from ..features import FLAG, feature_columns, swap_orientation
+
+
+class LeakSuspected(Exception):
+    pass
+
+
+F1_FLAG, F2_FLAG = f"f1_{FLAG}", f"f2_{FLAG}"
+
+
+def flagged(df: pd.DataFrame) -> np.ndarray:
+    """Fights where either fighter had a snapshot field filled in."""
+    return (df[F1_FLAG] | df[F2_FLAG]).to_numpy(dtype=bool)
+
+
+def _training_set(train: pd.DataFrame, y: np.ndarray):
+    """Drop every fight with a filled-in snapshot value: a model never sees a label next to one."""
+    keep = ~flagged(train)
+    return train[keep], np.asarray(y)[keep]
+
+
+def _guard_columns(cols) -> None:
+    bad = [c for c in cols if FLAG in c]
+    if bad:
+        raise LeakSuspected(f"snapshot_imputed columns reached a model: {bad}")
+
 
 LOGREG_DIFFS = [
     "diff_elo",
@@ -47,16 +72,20 @@ def elo_expected(train, y, test) -> np.ndarray:
     return 1.0 / (1.0 + 10.0 ** (-test["diff_elo"].to_numpy(dtype=float) / 400.0))
 
 
-def _logreg_matrix(df: pd.DataFrame) -> np.ndarray:
+def _logreg_matrix(df: pd.DataFrame, extra=()) -> np.ndarray:
+    cols = [*LOGREG_DIFFS, *extra]
+    _guard_columns(cols)
     d = df.copy()
     d["diff_sig_diff"] = d["diff_slpm_career"].astype(float) - d["diff_sapm_career"].astype(float)
-    return d[LOGREG_DIFFS].to_numpy(dtype=float)
+    return d[cols].to_numpy(dtype=float)
 
 
 def _symmetric(make, matrix):
     """Wrap a classifier factory in the two-orientation train / averaged predict protocol."""
 
     def run(train, y, test) -> np.ndarray:
+        if flagged(train).any():
+            raise LeakSuspected("a training row has a filled-in snapshot value")
         both = pd.concat([train, swap_orientation(train)], ignore_index=True)
         labels = np.concatenate([y, 1 - y])
         model = make().fit(matrix(both), labels)
@@ -70,6 +99,8 @@ def _symmetric(make, matrix):
 
 
 def logistic_regression(train, y, test) -> np.ndarray:
+    train, y = _training_set(train, y)
+
     def make():
         return make_pipeline(
             # train medians + missing flags. Only history columns can be null (debutants, real
@@ -84,8 +115,11 @@ def logistic_regression(train, y, test) -> np.ndarray:
 
 
 def gradient_boosting(train, y, test) -> np.ndarray:
+    train, y = _training_set(train, y)
     # columns with fewer than two distinct training values carry no signal (and trip sklearn's binning)
     cols = [c for c in feature_columns(train) if train[c].astype(float).nunique() >= 2]
+
+    _guard_columns(cols)
 
     def matrix(df):
         return df[cols].to_numpy(dtype=float)  # nulls become NaN, handled natively

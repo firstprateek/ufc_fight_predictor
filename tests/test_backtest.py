@@ -2,11 +2,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import ufc.backtest.models as BM
 from ufc.backtest import LeakSuspected, run_backtest
 from ufc.backtest import metrics as M
-from ufc.backtest.models import MODELS
+from ufc.backtest.models import MODELS, flagged
 from ufc.backtest.run import scored_fights, walk_forward
-from ufc.features import build_features, swap_orientation
+from ufc.features import build_features, feature_columns, swap_orientation
 
 
 def synthetic(n_fights=700, seed=1):
@@ -165,3 +166,69 @@ def test_paired_bootstrap_interval_contains_zero_under_the_null():
     a, b = rng.uniform(0.5, 0.8, 600), rng.uniform(0.5, 0.8, 600)
     d, lo, hi = M.paired_bootstrap(a, b, ev, draws=300)
     assert lo < 0 < hi
+
+
+@pytest.fixture(scope="module")
+def flagged_data():
+    """Like `data`, but six fighters lack reach (so their fights carry a snapshot flag)."""
+    fights, fighters = synthetic()
+    fighters.loc[fighters.fighter_id.isin([f"f{i:02d}" for i in range(6)]), "reach_cm"] = None
+    stats = pd.DataFrame(columns=["fight_id", "fighter_id", "round"])
+    return fights, build_features(fights, stats, fighters)
+
+
+def test_flags_never_reach_a_feature_matrix_and_flagged_fights_are_not_trained_on(
+    flagged_data, monkeypatch
+):
+    fights, feats = flagged_data
+    assert feats.f1_snapshot_imputed.dtype == bool and flagged(feats).any()
+    assert not any("snapshot_imputed" in c for c in feature_columns(feats))
+    mats = []
+    real_fit = BM.HistGradientBoostingClassifier.fit
+
+    def spy(self, X, y, *a, **k):
+        mats.append(X)
+        return real_fit(self, X, y, *a, **k)
+
+    monkeypatch.setattr(BM.HistGradientBoostingClassifier, "fit", spy)
+    s = scored_fights(feats, fights)
+    train, test = s[s.date < "2015-01-01"], s[s.date >= "2015-01-01"].head(30)
+    assert flagged(train).any()
+    MODELS["hgb"](train, train.y.to_numpy(), test)
+    cols = [c for c in feature_columns(train) if train[c].astype(float).nunique() >= 2]
+    assert mats[0].shape == (2 * (~flagged(train)).sum(), len(cols))
+
+
+def test_models_refuse_flagged_training_rows_and_flag_columns(flagged_data):
+    fights, feats = flagged_data
+    s = scored_fights(feats, fights)
+    train = s[s.date < "2015-01-01"]
+    assert flagged(train).any()
+    with pytest.raises(LeakSuspected):
+        BM._symmetric(lambda: None, lambda d: d)(train, train.y.to_numpy(), train)
+    with pytest.raises(LeakSuspected, match="snapshot_imputed"):
+        BM._guard_columns(["diff_elo", "f1_snapshot_imputed"])
+    with pytest.raises(LeakSuspected, match="snapshot_imputed"):
+        BM._logreg_matrix(train.assign(diff_snapshot_imputed=1.0), extra=["diff_snapshot_imputed"])
+
+
+def test_labels_of_flagged_fights_have_no_influence(flagged_data):
+    fights, feats = flagged_data
+    s = scored_fights(feats, fights)
+    base = walk_forward(s, "2015-01-01")
+    flipped = s.copy()
+    hit = flagged(flipped) & (flipped.date < "2017-01-01")
+    assert hit.sum() > 20
+    flipped.loc[hit, "y"] = 1 - flipped.loc[hit, "y"]
+    alt = walk_forward(flipped, "2015-01-01")
+    cols = [f"p_{m}" for m in MODELS]
+    pd.testing.assert_frame_equal(base[cols], alt[cols], check_exact=True)
+
+
+def test_report_counts_flagged_fights(flagged_data, tmp_path):
+    fights, feats = flagged_data
+    run_backtest(feats, fights, "2015-01-01", tmp_path / "r")
+    text = (tmp_path / "r" / "report.md").read_text()
+    assert "excluded from training, all history" in text
+    assert "last training fold" in text and "carrying a flag" in text
+    assert "| hgb | flagged |" in text and "| logreg | unflagged |" in text
