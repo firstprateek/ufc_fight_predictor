@@ -19,7 +19,7 @@ with row counts for pipeline changes.
 
 ## Consequences
 
-Only changes the owner explicitly asks to approve are root. The `agent-git-workflow` ruleset is enabled once
+Until then auto-merge applies at once, so agents wait for checks and review by hand. Only changes the owner explicitly asks to approve are root. The `agent-git-workflow` ruleset is enabled once
 the CI check exists on `master`.
 
 ## Rollback

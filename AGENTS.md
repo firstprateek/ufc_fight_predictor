@@ -1,6 +1,6 @@
 # Agent notes
 
-Design and plan: `docs/design.md`. The 2018 class project in `legacy/2018/` is history only; nothing new imports from it.
+Design and plan: `docs/design.md`; the 2018 project in `legacy/2018/` is history only and nothing new imports from it. Both arrive in the scaffold PR (next); until then `make check` cannot pass (no `pyproject.toml` yet).
 
 ## Agent git workflow
 
