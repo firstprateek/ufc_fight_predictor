@@ -133,8 +133,22 @@ def main(argv: list[str] | None = None) -> int:
             cmd = "uv run ufc backtest" + (
                 f" --start {args.start}" if args.start != "2015-01-01" else ""
             )
+            odds_path = processed / "odds.parquet"
+            odds = pd.read_parquet(odds_path) if odds_path.exists() else None
+            osnap = fetch_mod.latest_odds_snapshot(raw)
+            if odds is None:
+                print("no odds.parquet (run `ufc build` after `ufc fetch`): market not scored")
             try:
-                run_backtest(feats, t["fights"], args.start, out, snap, cmd)
+                run_backtest(
+                    feats,
+                    t["fights"],
+                    args.start,
+                    out,
+                    snap,
+                    cmd,
+                    odds,
+                    osnap.name if osnap else "unknown",
+                )
             except LeakSuspected as e:
                 print(f"LEAK LIKELY: {e} (report written to {out})", file=sys.stderr)
                 return 1

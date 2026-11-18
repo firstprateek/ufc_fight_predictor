@@ -127,6 +127,13 @@ def gradient_boosting(train, y, test) -> np.ndarray:
     return _symmetric(lambda: HistGradientBoostingClassifier(**HGB_PARAMS), matrix)(train, y, test)
 
 
+def market(train, y, test) -> np.ndarray:
+    """The betting market: the odds-implied probability that fighter 1 wins (margin removed).
+    No training. `test` must carry `p_market_f1`; fights without odds are NaN. Not in `MODELS`:
+    it is scored only on fights with odds, and no other model ever sees the column."""
+    return test["p_market_f1"].to_numpy(dtype=float)
+
+
 MODELS = {
     "coin_flip": coin_flip,
     "elo": elo_expected,
