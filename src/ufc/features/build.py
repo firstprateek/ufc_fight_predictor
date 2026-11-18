@@ -44,6 +44,9 @@ METRICS = [
 STATIC = ["height_cm", "reach_cm"]
 PHYSICAL = ["age", "height_cm", "reach_cm", "stance", "southpaw"]
 IMPUTED_STANCE = "Orthodox"
+# Per fighter, true when any of height, reach, stance or dob was filled in. A bookkeeping column for
+# the backtest (it keeps such fights out of training); it is never a model input.
+FLAG = "snapshot_imputed"
 KEYS = ["fight_id", "event_id", "date", "fighter_1_id", "fighter_2_id"]
 
 _SUMMED = [
@@ -229,6 +232,9 @@ def fit_imputation(fights: pd.DataFrame, fighters: pd.DataFrame) -> Imputation:
 def _static_features(fid, fighter: dict | None, on: date, imp: Imputation) -> dict:
     """Physical features with every missing snapshot field imputed (never null)."""
     f = fighter or {}
+    imputed = any(
+        f.get(k) is None or pd.isna(f.get(k)) for k in ("height_cm", "reach_cm", "stance", "dob")
+    )
     dob = f.get("dob")
     if dob is not None and not pd.isna(dob):
         age = (on - date.fromisoformat(dob)).days / 365.25
@@ -248,6 +254,7 @@ def _static_features(fid, fighter: dict | None, on: date, imp: Imputation) -> di
         "reach_cm": reach,
         "stance": stance,
         "southpaw": float(stance == "Southpaw"),
+        FLAG: imputed,
     }
 
 
@@ -264,12 +271,10 @@ def _elo_expected(r1: float, r2: float) -> float:
 
 
 def feature_columns(df: pd.DataFrame) -> list[str]:
-    """Numeric model inputs: every f1_/f2_/diff_ column except the stance strings."""
-    return [
-        c
-        for c in df.columns
-        if c.startswith(("f1_", "f2_", "diff_")) and c not in ("f1_stance", "f2_stance")
-    ]
+    """Numeric model inputs: every f1_/f2_/diff_ column except the stance strings and the
+    snapshot_imputed flags (which must never reach a model)."""
+    skip = ("f1_stance", "f2_stance", f"f1_{FLAG}", f"f2_{FLAG}")
+    return [c for c in df.columns if c.startswith(("f1_", "f2_", "diff_")) and c not in skip]
 
 
 def swap_orientation(df: pd.DataFrame) -> pd.DataFrame:
@@ -314,6 +319,7 @@ def build_features(
                     **_static_features(fid, static.get(fid), on, imp),
                 }
                 f["elo"] = elo[fid]
+                row[f"{side}_{FLAG}"] = f.pop(FLAG)
                 parts[side] = f
                 row.update({f"{side}_{k}": v for k, v in f.items()})
             for k in parts["f1"]:
@@ -359,7 +365,7 @@ def build_features(
     for c in df.columns:
         if c in ints:
             df[c] = df[c].astype("Int64")
-        elif c not in KEYS and c not in ("f1_stance", "f2_stance"):
+        elif c not in KEYS and c not in ("f1_stance", "f2_stance", f"f1_{FLAG}", f"f2_{FLAG}"):
             df[c] = df[c].astype("float64")
     return df.reset_index(drop=True)
 

@@ -10,14 +10,10 @@ import pandas as pd
 
 from ..features import swap_orientation
 from . import metrics as M
-from .models import MODELS
+from .models import MODELS, LeakSuspected, flagged
 
 TRIPWIRE_ACCURACY = 0.75
 BOOTSTRAP_DRAWS = 1000
-
-
-class LeakSuspected(Exception):
-    pass
 
 
 def scored_fights(features: pd.DataFrame, fights: pd.DataFrame) -> pd.DataFrame:
@@ -44,6 +40,7 @@ def walk_forward(scored: pd.DataFrame, start: str) -> pd.DataFrame:
         assert train.date.max() < q <= test.date.min(), "training data must precede the quarter"
         part = test[["fight_id", "event_id", "date", "y"]].copy()
         part["quarter"] = q
+        part["snapshot_imputed"] = flagged(test)
         sw = swap_orientation(test)
         if not swap_orientation(sw).equals(test):
             raise LeakSuspected("swap_orientation is not an involution")
@@ -113,7 +110,40 @@ def summary_markdown(pred: pd.DataFrame) -> tuple[str, dict]:
     return "\n".join(md), overall
 
 
-def report_markdown(pred, start, snapshot, command, features_rows) -> tuple[str, dict]:
+def flag_breakdown(pred: pd.DataFrame) -> str:
+    """Scored fights with a filled-in snapshot value versus without (never trained on)."""
+    rows = []
+    for m in ("logreg", "hgb"):
+        for label, g in (
+            ("flagged", pred[pred.snapshot_imputed]),
+            ("unflagged", pred[~pred.snapshot_imputed]),
+        ):
+            if len(g):
+                s = M.summarize(g[f"p_{m}"], g.y)
+                rows.append([m, label, s["n"], f"{s['log_loss']:.4f}", f"{s['accuracy']:.3f}"])
+    return _table(rows, ["model", "subset", "fights", "log loss", "accuracy"])
+
+
+def _train_lines(pred, info) -> list[str]:
+    n_flag = int(pred.snapshot_imputed.sum())
+    lines = [
+        "- models train only on fights where neither fighter has a filled-in snapshot value "
+        "(height, reach, stance, dob); `snapshot_imputed` flags are never model inputs",
+        f"- scored fights in the test period carrying a flag: {n_flag} of {len(pred)}",
+    ]
+    if info:
+        lines += [
+            f"- decided fights excluded from training, all history: {info['excluded_all']} "
+            f"of {info['scored_all']}",
+            f"- last training fold ({info['last_quarter']}): {info['excluded_last']} of "
+            f"{info['train_last']} fights excluded",
+        ]
+    return lines
+
+
+def report_markdown(
+    pred, start, snapshot, command, features_rows, train_info=None
+) -> tuple[str, dict]:
     summary, overall = summary_markdown(pred)
     pred = pred.assign(year=pred.date.str[:4])
     rows = []
@@ -131,12 +161,19 @@ def report_markdown(pred, start, snapshot, command, features_rows) -> tuple[str,
         "- each quarter: fit on all scored fights dated before the quarter, predict the quarter",
         "- ECE: 10 equal-width bins, each fight counted from both fighters' views",
         "- accuracy: p = 0.5 counts as half a hit",
+        *_train_lines(pred, train_info),
         "",
         summary,
         "",
         "### Per year",
         "",
         _table(rows, ["year", *HEADER]),
+        "",
+        "### Scored fights with a filled-in snapshot value (flagged) versus without",
+        "",
+        "Models never train on flagged fights; they are still predicted and scored.",
+        "",
+        flag_breakdown(pred),
         "",
     ]
     return "\n".join(head), overall
@@ -153,7 +190,16 @@ def run_backtest(
     """Run the walk-forward backtest, write the report, and enforce the leak tripwire."""
     scored = scored_fights(features, fights)
     pred = walk_forward(scored, start)
-    md, overall = report_markdown(pred, start, snapshot, command, len(features))
+    last_q = pred.quarter.max()
+    train_last = scored[scored.date < last_q]
+    info = {
+        "scored_all": len(scored),
+        "excluded_all": int(flagged(scored).sum()),
+        "last_quarter": last_q,
+        "train_last": len(train_last),
+        "excluded_last": int(flagged(train_last).sum()),
+    }
+    md, overall = report_markdown(pred, start, snapshot, command, len(features), info)
     if out_dir is not None:
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "report.md").write_text(md + "\n")

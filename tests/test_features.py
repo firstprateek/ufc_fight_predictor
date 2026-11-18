@@ -181,7 +181,9 @@ def test_missing_snapshot_fields_leave_no_trace_in_the_row():
         h, h * imp.reach_ratio, imp.stance, str(pd.Timestamp("2020-02-01") - pd.Timedelta(days=10000))[:10],
     ]  # fmt: skip
     b = build_features(fights, stats, filled, imp)
-    pd.testing.assert_frame_equal(a, b)
+    flags = ["f1_snapshot_imputed", "f2_snapshot_imputed"]  # the one column that may differ
+    assert a.f2_snapshot_imputed[0] and not b.f2_snapshot_imputed[0]
+    pd.testing.assert_frame_equal(a.drop(columns=flags), b.drop(columns=flags))
     assert a.f2_height_cm[0] == h and a.f2_stance[0] == "Orthodox"
     # whole fixture: no physical null anywhere, and the rest of C's rows is the same
     full = build_features(FIGHTS, STATS, bare, imp)

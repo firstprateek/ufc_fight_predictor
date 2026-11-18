@@ -3,6 +3,7 @@
 from .build import (
     ELO_K,
     ELO_START,
+    FLAG,
     HALF_LIFE_FIGHTS,
     Imputation,
     PhysicalNullError,
@@ -15,6 +16,7 @@ from .build import (
 )
 
 __all__ = [
+    "FLAG",
     "ELO_K",
     "ELO_START",
     "HALF_LIFE_FIGHTS",
