@@ -43,6 +43,11 @@ The 2018 class project is kept under `legacy/2018/` for history only. Nothing in
    The first baseline exploited this (the tree model's log loss was 0.590 in 2015 and drifted to about
    0.65 later) and the truncation check cannot see it, because the snapshot is not truncated.
 
+7. **Odds are read through five columns.** The odds file also holds the winner and many
+   result-derived columns. `odds.load_odds_source` reads only `R_fighter`, `B_fighter`, `R_odds`,
+   `B_odds` and `date` (pandas `usecols`), and a test enforces it. Nothing else from that file may
+   be loaded, however convenient: a result column next to the prices is a leak waiting to happen.
+
 ## Layout
 
 ```
@@ -51,9 +56,10 @@ src/ufc/            package (CLI entry point: `ufc`)
   parse.py          raw cells -> typed values (pure functions)
   build.py          source CSVs -> validated Parquet tables
   validate.py       table validation
+  odds.py           historical odds: five-column loader, matching to fights, odds.parquet
   features/         point-in-time features
   backtest/         walk-forward evaluation
-overrides/          committed manual fixes for the build (fighter ids, dropped fights)
+overrides/          committed manual fixes for the build (fighter ids, dropped fights, odds names)
 tests/              pytest, offline, uses small hand-made CSV fixtures
 data/raw/           source snapshots              (gitignored)
 data/processed/     Parquet tables                (gitignored)
@@ -221,8 +227,48 @@ exits non-zero and says a leak is likely. Real accuracy is expected around 55-65
 catches gross leaks (a subtle one would sit under 75%); the real protection is the point-in-time
 construction, the truncation check (a 200-fight sample) and the tests that flip later labels and results.
 
+## Milestone 3: market odds
+
+The betting market is the benchmark the models are measured against. This part builds the odds table;
+the benchmark itself is described in the next section once it lands.
+
+Source: GitHub `shortlikeafox/ultimate_ufc_dataset` (Apache-2.0), file `ufc-master.csv` at the repo root
+(7,177 fights from 2010-03-21 to 2026-03-28 at the pinned commit). Odds are American moneylines in
+`R_odds` and `B_odds`; the bookmaker and how close to the fight they were taken are not
+documented, so we call them "pre-fight moneyline, book and timing unknown". `ufc fetch` downloads the
+file at one upstream commit into `data/raw/odds/<sha>/` and records the sha (`--odds-sha` pins one);
+it is never committed. Only the five columns in principle 7 are read. Rows with a blank price on
+either side are skipped (about 250, mostly 2023-2024).
+
+`ufc build` then writes `data/processed/odds.parquet`, one row per matched fight: `fight_id`,
+`odds_f1`, `odds_f2` (American, in our `fighter_1` / `fighter_2` orientation), `p_market_f1` (each side's
+implied probability, `100 / (o + 100)` for a positive price and `-o / (-o + 100)` for a negative one,
+normalised so the two sum to 1, which removes the bookmaker margin) and `overround` (the sum before
+normalising). Without a fetched odds snapshot the build still succeeds and says odds were skipped.
+
+Matching an odds row to a fight:
+
+1. Names are normalised: case, accents, punctuation (hyphens count as spaces), spacing and the suffixes
+   Jr, Sr, II, III, IV. Our names come from `fighters.name` via the fight's fighter ids.
+2. Main pass: the same unordered pair of normalised names, with the odds date within one day of the
+   fight date.
+3. Fallback pass, same date only: both fighters' surnames equal ours (the two surnames differ from each
+   other) and exactly one fighter's full normalised name is identical (for example `Nick` against
+   `Nicholas`).
+4. Manual aliases in the committed `overrides/odds_names.csv` (`odds_name`, `fighter_name`, `note`),
+   applied before the passes. Each row is a fighter the odds file names differently from ufcstats
+   (a later name change, a nickname, a spelling), with the evidence in the note.
+5. Never guess. An odds row that fits no fight, or more than one, is left unmatched and listed in the
+   build output. A fight claimed by two odds rows is left unmatched for both.
+
+Validation: `p_market_f1` strictly between 0 and 1; overround between 0.95 and 1.25 (rows outside are
+dropped, counted and listed: they are corrupt prices, for example two long underdogs); one odds row per
+fight; every `fight_id` exists in `fights`. `ufc validate` re-checks the built table. The build prints
+coverage per year (source rows with odds, matched, unmatched) and the share of scored fights (decided,
+from 2015-01-01) that have odds.
+
 ## Later
 
-Skill ratings with uncertainty per dimension; historical and live odds; method and round prediction;
+Skill ratings with uncertainty per dimension; live odds for upcoming fights; method and round prediction;
 TabPFN in the ensemble; LLM-read news signals (evaluated only on fights after the model's cutoff);
 weekly scheduled run.
