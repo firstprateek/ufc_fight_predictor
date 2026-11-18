@@ -85,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "backtest":
             t = load_tables(processed)
             feats = pd.read_parquet(processed / "features.parquet")
+            check_physical(feats)  # a stale pre-fix features file must not run silently
             try:
                 snap = fetch_mod.latest_snapshot(raw).name
             except FileNotFoundError:

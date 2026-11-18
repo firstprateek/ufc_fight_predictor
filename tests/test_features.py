@@ -123,7 +123,7 @@ def test_physical_features(feats):
         (pd.Timestamp("2020-01-01") - pd.Timestamp("1990-01-01")).days / 365.25
     )
     imp = fit_imputation(FIGHTS, FIGHTERS)
-    assert r.f2_age == imp.age == r.f2_age and r.diff_age == pytest.approx(r.f1_age - imp.age)
+    assert r.f2_age == imp.age and r.diff_age == pytest.approx(r.f1_age - imp.age)
     assert r.diff_height_cm == 5.0
     assert r.f2_reach_cm == pytest.approx(175.0 * imp.reach_ratio)  # B: imputed from height
     assert (r.f1_stance, r.f2_stance, r.f1_southpaw, r.f2_southpaw, r.diff_southpaw) == (

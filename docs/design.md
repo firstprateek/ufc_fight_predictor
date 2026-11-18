@@ -145,7 +145,11 @@ Features (each exists as `f1_x`, `f2_x`, `diff_x` unless noted):
   fighter's (possibly imputed) height times the global median reach-to-height ratio. stance:
   `Orthodox`. age: the global median age at fight time. Diffs are computed after imputation.
   `ufc features` exits non-zero if any physical column (per fighter or diff) contains a null. The
-  leak check reuses the constants fitted on the full tables.
+  leak check reuses the constants fitted on the full tables. The constants and each fighter's
+  division use fight dates and divisions of all fights, including later ones (no results), which
+  the truncation check cannot see. Known limitation: an imputed value is a constant, so a tree can
+  still isolate the exact imputed age (and reach = imputed height x ratio); residual signal of this
+  kind is not yet measured or removed.
 - Rates, each as `x_career` (ratio of sums over all prior fights with the stat) and `x_ewm`
   (exponentially weighted, **half-life 3 fights**: the most recent prior fight has weight 1, the one
   before 0.5^(1/3), and so on): `slpm`, `sapm` (significant strikes landed / absorbed per minute),
