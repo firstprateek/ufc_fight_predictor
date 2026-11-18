@@ -11,7 +11,7 @@ import pandas as pd
 from ..features import check_columns, parse_feature_set, set_name, swap_orientation
 from . import market as MK
 from . import metrics as M
-from .models import LeakSuspected, blend, flagged, model_names, models_for
+from .models import LeakSuspected, fit_predict, flagged, model_names, models_for
 from .protocol import check_run
 
 TRIPWIRE_ACCURACY = 0.75
@@ -58,14 +58,15 @@ def walk_forward(
         sw = swap_orientation(test)
         if not swap_orientation(sw).equals(test):
             raise LeakSuspected("swap_orientation is not an involution")
+        fitted = fit_predict(train, train.y.to_numpy(), test, groups)
         for name, model in models.items():
-            p = model(train, train.y.to_numpy(), test)
+            p = fitted[name] if name in fitted else model(train, train.y.to_numpy(), test)
             part[f"p_{name}"] = p
             if name in ("logreg", "hgb"):  # orientation guard: swapping the fighters gives 1 - p
                 p_swapped = model(train, train.y.to_numpy(), sw)
                 if not np.allclose(p + p_swapped, 1.0, atol=1e-9):
                     raise LeakSuspected(f"{name}: swapping fighters did not give 1 - p")
-        part["p_blend"] = blend(part["p_hgb"], part["p_logreg"])
+        part["p_blend"] = fitted["blend"]
         if odds is not None:  # the market column goes on the result only, never into a model input
             part = MK.add_market(part, odds)
         out.append(part)
