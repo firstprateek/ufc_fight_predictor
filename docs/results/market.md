@@ -1,4 +1,4 @@
-# Against the market
+# Market benchmark
 
 - odds snapshot: `31d2941509506c9f20e02a5f1de9c253c5289f9c` (`ufc-master.csv`, pre-fight moneyline, book and timing unknown)
 - data snapshot: `96adace863c0a793579cc06d27d468797545607f`
