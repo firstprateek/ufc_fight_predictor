@@ -1,3 +1,4 @@
+import dataclasses
 import math
 from datetime import date
 
@@ -161,16 +162,31 @@ def test_adjusted_same_date_fights_use_pre_date_state():
     assert run([0, 1]) == run([1, 0])
 
 
-def test_all_trackers_are_independent_of_the_order_of_fights_within_a_date():
-    fights, fighters = synthetic(150)
-    stats = _stats(fights)
-    a = build_features(fights, stats, fighters)
-    shuffled = fights.sample(frac=1.0, random_state=3)
-    b = build_features(shuffled, stats, fighters)
-    cols = [c for c in a.columns if column_group(c) != "base"]
-    pd.testing.assert_frame_equal(
-        a.set_index("fight_id")[cols], b.set_index("fight_id").loc[a.fight_id, cols]
-    )
+def test_trackers_are_independent_of_the_order_of_fights_within_a_date():
+    """One fighter in two bouts on a date (old tournament nights): the update is order independent."""
+    on = date(2020, 1, 1)
+    bs = [
+        bout("A", "B", 1.0, method="ko", m1={"slpm": 9.0}, m2={"slpm": 5.0}),
+        bout("A", "C", 0.0, method="sub", m1={"slpm": 2.0}, m2={"slpm": 7.0}),
+        bout("D", "A", 0.5, method="unanimous", m1={"slpm": 4.0}, m2={"slpm": 4.0}),
+    ]
+
+    def states(order):
+        g, m, a, c = Glicko(6.0), MethodElo(P), Adjusted(P), Context()
+        _scaled(a)
+        elo = dict.fromkeys("ABCD", 1500.0)
+        for t in (g, m, a, c):
+            t.update(on, [bs[i] for i in order], elo)
+        return g.r, g.rd, m.r, a.off, a.defn, a.n
+
+    ref = states([0, 1, 2])
+    for order in ([2, 1, 0], [1, 0, 2]):
+        got = states(order)
+        assert got[0] == pytest.approx(ref[0]) and got[1] == pytest.approx(ref[1])
+        assert got[2] == pytest.approx(ref[2]) and dict(got[5]) == dict(ref[5])
+        for d in DIMENSIONS:
+            assert dict(got[3][d]) == pytest.approx(dict(ref[3][d]))
+            assert dict(got[4][d]) == pytest.approx(dict(ref[4][d]))
 
 
 def _stats(fights, seed=2):
@@ -250,13 +266,42 @@ def test_new_features_ignore_a_fights_own_result_and_stats_and_later_results(wor
     assert not f.loc[~up_to, cols].equals(other.loc[~up_to, cols])  # later fights do see it
 
 
-def test_same_date_fights_never_see_each_other(world):
-    fights, stats, fighters, feats = world
-    f = feats.merge(fights[["fight_id", "date"]].rename(columns={"date": "d2"}), on="fight_id")
-    # the first fight of each fighter shows the prior, even if it is on a date with other fights
-    debut = f[(f.f1_n_fights == 0) & (f.f2_n_fights == 0)]
-    assert len(debut) > 0
-    assert (debut.f1_glicko_r == 1500.0).all() and (debut.f1_glicko_rd == 350.0).all()
+def test_same_date_fights_use_pre_date_state_even_for_a_repeated_fighter():
+    fights, fighters = synthetic(30)
+    stats = _stats(fights)
+    day = fights.date.iloc[0]
+    # fights x00000..x00002 share the first event; make fighter f1 of x00000 also fight in x00001
+    two = fights.iloc[:2].copy()
+    two["date"], two["event_id"] = day, "e1"
+    two.loc[1, "fighter_1_id"] = two.loc[0, "fighter_1_id"]
+    two.loc[1, "fighter_2_id"] = "f23" if two.loc[0, "fighter_2_id"] != "f23" else "f22"
+    nxt = fights.iloc[2:3].copy()
+    nxt["date"], nxt["event_id"], nxt["fighter_1_id"], nxt["fighter_2_id"] = (
+        "2012-03-01", "e2", two.loc[0, "fighter_1_id"], "f21",
+    )  # fmt: skip
+    nxt["bout_order"] = 1
+    both = pd.concat([two, nxt], ignore_index=True)
+    both["winner_id"] = both["fighter_1_id"]
+    both["bout_order"] = [1, 2, 1]
+    swapped = both.copy()
+    swapped["bout_order"] = [2, 1, 1]  # the same date's fights in the other order
+    a = build_features(both, stats, fighters).set_index("fight_id")
+    b = build_features(swapped, stats, fighters).set_index("fight_id")
+    f = two.loc[0, "fighter_1_id"]
+    for fid in two.fight_id:  # both fights of the date see the fighter's prior state
+        r = a.loc[fid]
+        side = "f1" if r.fighter_1_id == f else "f2"
+        assert r[f"{side}_glicko_r"] == 1500.0 and r[f"{side}_welo"] == 1500.0
+        assert r[f"{side}_adj_slpm_off"] == 0.0 and r[f"{side}_ctx_wc_fights"] == 0.0
+    # after the date the fighter carries both fights' updates, whatever their order
+    after = nxt.fight_id.iloc[0]
+    cols = [
+        c
+        for c in a.columns
+        if column_group(c) in ("ratings", "adjusted") or c in ("f1_elo", "f2_elo")
+    ]
+    pd.testing.assert_series_equal(a.loc[after, cols], b.loc[after, cols])
+    assert a.loc[after, "f1_glicko_r"] != 1500.0
 
 
 def test_context_features_by_hand():
@@ -369,8 +414,63 @@ def test_tuning_is_deterministic_and_scores_one_step_ahead(tuning_world):
     assert g.predict(bouts[0].card, on) == 0.5
 
 
+def test_tuner_predicts_each_fight_before_learning_it(tuning_world):
+    fights, stats = tuning_world
+    sub, sub_stats = TUNE.pre_cutoff(fights, stats, "2013-01-01")
+    days = make_days(sub, sub_stats)
+
+    class Recorder(TUNE._GlickoPred):
+        def __init__(self):
+            super().__init__(6.0)
+            self.log, self.preds = [], []
+
+        def predict(self, card, on):
+            p = super().predict(card, on)
+            self.log.append(("predict", on))
+            self.preds.append((card.fight_id, p))
+            return p
+
+        def update(self, on, bouts, elo_after=None):
+            self.log.append(("update", on))
+            super().update(on, bouts, elo_after)
+
+    rec = Recorder()
+    TUNE._log_loss(rec, days, date(2000, 1, 1))
+    # per date: every prediction comes before that date's update
+    assert [e for e, _ in rec.log].count("update") == len(days)
+    seen_update = set()
+    for kind, on in rec.log:
+        if kind == "update":
+            seen_update.add(on)
+        else:
+            assert on not in seen_update
+    # the result of a fight (and everything after) changes no prediction made up to and including it
+    k = len(days) // 2
+    flipped = list(days)
+    on, bouts = flipped[k]
+    flipped[k] = (
+        on,
+        [dataclasses.replace(b, s1=None if b.s1 is None else 1.0 - b.s1) for b in bouts],
+    )
+    rec2 = Recorder()
+    TUNE._log_loss(rec2, flipped, date(2000, 1, 1))
+    n_through = sum(len(b) for _, b in days[: k + 1])
+    assert rec.preds[:n_through] == rec2.preds[:n_through]
+    assert rec.preds[n_through:] != rec2.preds[n_through:]
+
+
 def test_committed_constants_are_the_default_in_the_feature_build():
-    assert RATING_PARAMS.glicko_c > 0 and RATING_PARAMS.welo_k > 0
+    from dataclasses import replace
+
+    fights, fighters = synthetic(120)
+    stats = _stats(fights)
+    default = build_features(fights, stats, fighters)
+    pd.testing.assert_frame_equal(
+        default, build_features(fights, stats, fighters, params=RATING_PARAMS)
+    )
+    other = build_features(fights, stats, fighters, params=replace(RATING_PARAMS, glicko_c=0.0))
+    assert not default.f1_glicko_rd.equals(other.f1_glicko_rd)
+    assert default.f1_elo.equals(other.f1_elo)  # plain Elo does not use the tuned constants
 
 
 def test_cli_tune_ratings_compares_with_the_committed_constants(tmp_path, capsys, monkeypatch):

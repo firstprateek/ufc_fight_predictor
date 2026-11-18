@@ -207,7 +207,9 @@ tuned constants live in `features/params.py`; `ufc tune-ratings --before 2015-01
 - Method-weighted Elo (`welo`): like `elo`, but each update is `K x m(method) x (score - expected)`.
   `m` is 1 for split and majority decisions and tuned for unanimous decisions, KO/TKO (with doctor's
   stoppage), submissions and everything else (DQ, overturned, could not continue, other); `K` is tuned.
-  Plain `elo` stays (K = 32).
+  A draw uses its method's multiplier too; a no contest moves nothing. The multiplier grid starts at 0,
+  and the tuned value for the "other" endings is 0 (they do not move the rating). Plain `elo` stays
+  (K = 32).
 
 **`adjusted`** (opponent-adjusted performance). Five dimensions, each measured per fight from round
 stats as an output of the fighter: `slpm` (significant strikes landed per minute), `td15` (takedowns
@@ -219,7 +221,8 @@ date, each observation with error `e = (value - mean) / sd - (offence_A - defenc
 `offence_A += rate_A x e` and `defence_B -= rate_B x e`, where
 `rate = max(rate_min, 1 / (fights_with_stats + k0))` per fighter. Mean and sd are the running mean and
 standard deviation of every observation before the date; until a dimension has 30 observations
-nothing is updated (the sd would mean nothing). Fights without round stats update nothing. Columns:
+nothing is updated (the sd would mean nothing); the per-fighter fight count `fights_with_stats` still
+ counts those early fights. Fights without round stats update nothing. Columns:
 `adj_<dim>_off`, `adj_<dim>_def` and the pair feature `adj_<dim>_exp` (the expected value in the
 dimension's own units, `mean + sd x (own offence - opponent defence)`); `diff_adj_<dim>_exp` is the
 expected differential.
@@ -233,7 +236,8 @@ setting: `fights_24m` (prior fights in the last 730 days), `wc_fights` (prior fi
 class), `wc_first` (1 if none), `wc_move` (-1, 0 or +1: this division's weight limit against the last
 fight in a ranked division; null for catch weight, open weight, tournaments or no prior fight),
 `five_round_fights`, `title_fights` (prior), and for this fight `is_five_rounds` and `is_title`
-(announced before the fight; equal for both fighters, so their diffs are 0). History features are
+(announced before the fight; equal for both fighters, so their diffs are 0, except that
+`is_five_rounds` is null for the 31 fights with no scheduled-rounds value). History features are
 null for debutants; counts are 0.
 
 The announced facts of the fight itself (division, scheduled rounds, title) reach the trackers

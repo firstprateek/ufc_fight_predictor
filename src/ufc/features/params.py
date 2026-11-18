@@ -28,7 +28,7 @@ RATING_PARAMS = RatingParams(
     welo_unan=1.5,
     welo_ko=1.5,
     welo_sub=1.0,
-    welo_other=0.5,
+    welo_other=0.0,
     adj_k0=12.0,
     adj_rate_min=0.08,
 )
