@@ -31,7 +31,7 @@ src/ufc/            package (CLI entry point: `ufc`)
   build.py          source CSVs -> validated Parquet tables
   validate.py       table validation
   features/         point-in-time features
-  backtest/         walk-forward evaluation       (milestone 2, part 2)
+  backtest/         walk-forward evaluation
 overrides/          committed manual fixes for the build (fighter ids, dropped fights)
 tests/              pytest, offline, uses small hand-made CSV fixtures
 data/raw/           source snapshots              (gitignored)
@@ -96,7 +96,7 @@ Validation (fails loudly): unique ids; `fights` row count equals source fights m
 
 ## Milestone 2: features and backtest
 
-Built in two parts: point-in-time features (below), then the walk-forward backtest and report.
+Built in two parts: point-in-time features, then the walk-forward backtest and report (both below).
 
 ### Features (`src/ufc/features/`, `ufc features [--check]` -> `data/processed/features.parquet`)
 
@@ -144,6 +144,37 @@ Leak guard: `ufc features --check` rebuilds the features for a random sample of 
 every fight dated on or after them removed from the inputs (the fight itself kept) and requires an
 identical row (`--seed` changes the sample); it exits non-zero otherwise. It cannot see a dependence on
 the fight's own result or stats (the fight is kept), which has its own unit test. The same property is a unit test on fixtures.
+### Backtest (`src/ufc/backtest/`, `ufc backtest [--start 2015-01-01]`)
+
+Only `outcome == "win"` fights are scored; `y` = 1 if `fighter_1_id` won. The test period is every
+scored fight from the start date to the latest, split into calendar quarters. For each quarter every
+model is fitted on all scored fights dated before the quarter starts (including all history before the
+start date) and predicts the quarter. Elo and features are already point-in-time and are not refit.
+
+Models (hyperparameters fixed in `backtest/models.py`, never tuned on the test period):
+
+1. `coin_flip`: 0.5.
+2. `elo`: Elo expected score from the pre-fight ratings (K = 32, see above).
+3. `logreg`: logistic regression (C = 1) on `diff_elo`, `diff_age`, `diff_reach_cm`,
+   `diff_n_fights`, `diff_win_rate` and the striking differential (`diff_slpm_career - diff_sapm_career`);
+   train-set median imputation with missing flags, then standard scaling.
+4. `hgb`: scikit-learn `HistGradientBoostingClassifier` (200 iterations, learning rate 0.05, max depth
+   3, min 40 samples per leaf, L2 1.0, no early stopping, seed 0) on every numeric `f1_`/`f2_`/`diff_`
+   column; nulls are handled natively. Columns with fewer than two distinct training values are dropped.
+
+Symmetry: fitted models train on each fight in both orientations (`swap_orientation`: f1/f2 swapped,
+label flipped, diffs negated) and predict `p = (p(f1,f2) + 1 - p(f2,f1)) / 2`.
+
+Report (`reports/<snapshot-sha>-<date>/report.md` and `predictions.parquet`, gitignored; the
+summary is committed as `docs/results/baseline.md`): per model log loss, Brier, accuracy and ECE overall
+and per year; a calibration table for the best model; a paired bootstrap (events resampled, 1,000
+draws, seed 0, 95% percentile interval) of each model's log-loss difference from Elo. ECE uses 10
+equal-width bins with every fight counted from both fighters' views; accuracy counts p = 0.5 as half a hit.
+
+Leak guards: the truncation check above; the orientation check (each quarter, `logreg` and `hgb`
+must give `1 - p` for swapped fighters, and training dates must precede the quarter, else the run
+fails); and a tripwire: if any model's overall accuracy exceeds 75% the report is written, the command
+exits non-zero and says a leak is likely. Real accuracy is expected around 55-65%.
 
 ## Later
 

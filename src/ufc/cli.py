@@ -6,7 +6,11 @@ import argparse
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 from . import fetch as fetch_mod
+from .backtest import LeakSuspected, run_backtest
+from .backtest.run import default_out_dir
 from .build import build
 from .features import build_features, check_truncation
 from .validate import ValidationError, load_tables, validate
@@ -29,6 +33,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     ft.add_argument("--sample", type=int, default=200, help="fights to check with --check")
     ft.add_argument("--seed", type=int, default=0, help="sampling seed for --check")
+    bt = sub.add_parser("backtest", help="walk-forward backtest and report")
+    bt.add_argument("--start", default="2015-01-01", help="first day of the test period")
+    bt.add_argument("--reports-dir", type=Path, default=Path("reports"))
     args = ap.parse_args(argv)
     raw, processed = args.data_dir / "raw", args.data_dir / "processed"
 
@@ -74,6 +81,24 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
                 n = min(args.sample, len(feats))
                 print(f"truncation invariance holds on {n} sampled fights")
+        elif args.cmd == "backtest":
+            t = load_tables(processed)
+            feats = pd.read_parquet(processed / "features.parquet")
+            try:
+                snap = fetch_mod.latest_snapshot(raw).name
+            except FileNotFoundError:
+                snap = "unknown"
+            out = default_out_dir(args.reports_dir, snap)
+            cmd = "uv run ufc backtest" + (
+                f" --start {args.start}" if args.start != "2015-01-01" else ""
+            )
+            try:
+                run_backtest(feats, t["fights"], args.start, out, snap, cmd)
+            except LeakSuspected as e:
+                print(f"LEAK LIKELY: {e} (report written to {out})", file=sys.stderr)
+                return 1
+            print((out / "report.md").read_text())
+            print(f"report in {out}")
         else:
             rep = validate(load_tables(processed))
             print(
