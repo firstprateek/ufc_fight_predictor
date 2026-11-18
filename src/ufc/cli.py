@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import card as card_mod
 from . import fetch as fetch_mod
 from . import predict as predict_mod
 from . import score_log as score_mod
@@ -177,6 +178,29 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--id-2", help="fighter_id of the second name, if the name is shared")
     pr.add_argument("--json", action="store_true", help="print one JSON document")
     pr.add_argument("--log", action="store_true", help=f"append to {predict_mod.LOG_PATH}")
+    cd = sub.add_parser(
+        "card",
+        help="fetch the next card with betting prices and write it as a card file",
+        description="Fetch upcoming MMA fights and prices from The Odds API (needs ODDS_API_KEY; one "
+        "request, one credit), keep the fights whose two names match exactly one fighter, and write "
+        "a card file for `ufc predict --card`.",
+    )
+    cd.add_argument(
+        "--date", help="card date YYYY-MM-DD, New York (default: earliest with 5+ fights)"
+    )
+    cd.add_argument(
+        "--days", type=int, default=card_mod.DEFAULT_DAYS, help="look ahead (default 10)"
+    )
+    cd.add_argument("--out", type=Path, help="card file (default: cards/<card date>.csv)")
+    cd.add_argument("--force", action="store_true", help="overwrite an existing card file")
+    cd.add_argument(
+        "--from-file", type=Path, help="read a saved response instead of calling the API (no key)"
+    )
+    cd.add_argument(
+        "--now",
+        type=card_mod.parse_now,
+        help="treat this UTC time (YYYY-MM-DDTHH:MM) as the fetch time; for replaying a saved response",
+    )
     sl = sub.add_parser(
         "score-log",
         help="score the prediction log against what happened afterwards",
@@ -286,6 +310,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
         elif args.cmd == "predict":
             _predict(args, raw, processed)
+        elif args.cmd == "card":
+            print(card_mod.run_card(args, raw, load_tables(processed)))
         elif args.cmd == "score-log":
             log = args.log or raw.parent.parent / predict_mod.LOG_PATH
             if args.out and score_mod.is_log_file(args.out, log):
@@ -378,6 +404,7 @@ def main(argv: list[str] | None = None) -> int:
         TuneCutoffError,
         UnknownFeatureSet,
         predict_mod.PredictError,
+        card_mod.CardError,
     ) as e:
         print(e, file=sys.stderr)
         return 1

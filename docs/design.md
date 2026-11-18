@@ -58,6 +58,13 @@ The 2018 class project is kept under `legacy/2018/` for history only. Nothing in
    `backtest/protocol.py` refuses to run a feature set that is not the frozen one (or `base`) past
    2022-12-31.
 
+9. **The upcoming-card feed is read through four fields.** From The Odds API only the two fighter
+   names, the start time and the bookmaker prices (`h2h`) are parsed (`card.parse_event`, plus the
+   event id for messages); nothing else in a response is looked at. Its terms allow storing the data locally but not redistributing it, so raw
+   responses (`data/raw/odds_api/`) and card files with real prices (`cards/`) are gitignored and never
+   committed: not in tests, fixtures, docs or a PR. The test fixture is written by hand with made-up
+   prices.
+
 ## Layout
 
 ```
@@ -401,7 +408,8 @@ betting: no return-on-investment simulation is done.
 completed fights only and there is no upcoming-card source, so the person running the command names the
 fights. Out of scope here: fetching cards or live odds, method and round
 prediction, anything that changes the features, the models, their hyperparameters or the frozen
-configuration.
+configuration. (Fetching the upcoming card is `ufc card`, below; it writes a card file and leaves
+`predict` unchanged.)
 
 ```
 ufc predict "Fighter A" "Fighter B" [--date YYYY-MM-DD] [--weight-class NAME] [--rounds 3|5] [--title]
@@ -469,6 +477,55 @@ and a file with another header is refused, never rewritten. Columns: `run_utc`, 
 `code_commit` (`-dirty` if `git status` shows any change, tracked or not), `fighter_1_id`, `fighter_1_name`,
 `fighter_2_id`, `fighter_2_name`, `date`, `weight_class`, `scheduled_rounds`, `is_title`, `p_blend_1`,
 `p_hgb_1`, `p_logreg_1` (all for the first-typed fighter) and `odds_1`, `odds_2` (empty when not given).
+**Getting the card: `ufc card`.** Fetches the next card with betting prices from The Odds API
+(v4, `GET /v4/sports/mma_mixed_martial_arts/odds`, `regions=us`, `markets=h2h`, `oddsFormat=american`;
+one request is one credit, the free plan has 500 a month) and writes a card file that `ufc predict
+--card` reads unchanged:
+
+```
+ufc card [--date YYYY-MM-DD] [--days 10] [--out PATH] [--force] [--from-file response.json] [--now YYYY-MM-DDTHH:MM]
+```
+
+- **Key.** Only from the environment variable `ODDS_API_KEY`. Missing: the command prints how to get a
+  free key and exits non-zero. The key is sent only as the `apiKey` query parameter and is never
+  printed, logged or written to a file; HTTP and network errors are caught and reported as the status
+  and the API's message with the key removed. `--from-file` reads a saved response and needs no key.
+- **Fetch.** One request with a 30 s timeout. The remaining quota (`x-requests-remaining`) is printed
+  and the raw response is saved as `data/raw/odds_api/<fetch time, UTC>.json` (gitignored).
+- **Which fights.** Events starting from now to `--days` ahead (the feed's `commence_time`, UTC). Each
+  gets the calendar date of its start in `America/New_York`, so a card running past midnight UTC is one
+  date. Both names go through the `predict` name matching (`resolve_fighter`). A fight is **usable**
+  when both names match exactly one fighter and they are different fighters, and, if bookmakers list
+  it, at least one lists two priced outcomes. The card is `--date`, or else the earliest date with at
+  least 5 usable fights (`MIN_FIGHTS`). If there is none, the command lists the dates with their usable
+  counts, exits non-zero and writes nothing. Everything else within a day of the card date is
+  reported and not written: an unknown name (with the closest names), a shared name (candidates with
+  ids), the same fighter twice, an event with fewer than two priced outcomes, the same pairing
+  twice. The feed holds every MMA promotion and does not name one, so most other promotions' fights
+  appear as unknown names. A fighter is never guessed.
+- **Prices.** For each bookmaker that prices both fighters, `odds.remove_margin`; a bookmaker whose
+  total is outside `OVERROUND_RANGE` is skipped. The probability of the first fighter is the median
+  over the remaining bookmakers (the mean of the two middle ones when the count is even). `odds_1` and
+  `odds_2` are the margin-free American prices of that probability and its complement, to two decimals
+  (so `predict` recovers the probability to far better than 0.001, and `_check_odds` accepts them). No
+  usable bookmaker: the fight is written with blank prices. The prices are a snapshot at fetch time,
+  not closing prices.
+- **File.** `cards/<card date>.csv`, exactly the card columns; `weight_class`, `scheduled_rounds` and
+  `is_title` are blank (the model does not use them; `predict` fills the class from the fighters' last
+  fights, and the report says when it cannot because they last fought in different classes). An
+  existing file is never overwritten without `--force`.
+- **Report.** The card date, the fights written with the median market probability and the number of
+  bookmakers, the fights left out with reasons, the fetch time, and the standing lines: snapshot, not
+  closing prices; check that the card is the UFC card before logging; the next command.
+- **`--now`.** Treats the given UTC time as the fetch time when choosing the window. It exists for
+  replaying a saved response, whose events would otherwise be outside a window measured from today.
+- **Limits.** The date is the New York date of each event's `commence_time`; if the feed gives
+  per-fight start times, early prelims of a card in Asia or Australia can fall on the previous date
+  and would not be in the file. Names are matched against UFC fighters only, so the earliest date with
+  5 matches could be another promotion's card, which is why the report says to check. Run it with a day
+  to spare: a card dated today or earlier prints a warning, because `score-log` rejects a prediction
+  logged on the fight day.
+
 **Scoring the log: `ufc score-log`.** The 2023 to 2026 holdout has been used, so from now on the only
 fair test of the model is a prediction written down before a fight and scored afterwards. The command
 reads the log and the built `fights` table and never writes to the log:
