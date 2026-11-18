@@ -190,6 +190,21 @@ def test_missing_snapshot_fields_leave_no_trace_in_the_row():
     check_physical(full)
 
 
+def test_snapshot_imputed_flags():
+    df = build_features(FIGHTS, STATS, FIGHTERS)
+    assert df.f1_snapshot_imputed.dtype == bool and df.f2_snapshot_imputed.dtype == bool
+    by = df.set_index("fight_id")
+    # A is complete; B lacks reach and dob; C lacks height and stance
+    assert not by.loc["f1", "f1_snapshot_imputed"] and by.loc["f1", "f2_snapshot_imputed"]
+    assert by.loc["f2", "f2_snapshot_imputed"]
+    assert not any(c.startswith("diff_") and "snapshot_imputed" in c for c in df.columns)
+    assert not any("snapshot_imputed" in c for c in feature_columns(df))
+    sw = swap_orientation(df)
+    assert (sw.f1_snapshot_imputed == df.f2_snapshot_imputed).all()
+    nofighter = FIGHTERS[FIGHTERS.fighter_id != "A"]
+    assert build_features(FIGHTS, STATS, nofighter).f1_snapshot_imputed[0]
+
+
 def test_physical_null_guard():
     df = build_features(FIGHTS, STATS, FIGHTERS)
     check_physical(df)  # clean

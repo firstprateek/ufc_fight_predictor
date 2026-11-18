@@ -72,11 +72,12 @@ def elo_expected(train, y, test) -> np.ndarray:
     return 1.0 / (1.0 + 10.0 ** (-test["diff_elo"].to_numpy(dtype=float) / 400.0))
 
 
-def _logreg_matrix(df: pd.DataFrame) -> np.ndarray:
-    _guard_columns(LOGREG_DIFFS)
+def _logreg_matrix(df: pd.DataFrame, extra=()) -> np.ndarray:
+    cols = [*LOGREG_DIFFS, *extra]
+    _guard_columns(cols)
     d = df.copy()
     d["diff_sig_diff"] = d["diff_slpm_career"].astype(float) - d["diff_sapm_career"].astype(float)
-    return d[LOGREG_DIFFS].to_numpy(dtype=float)
+    return d[cols].to_numpy(dtype=float)
 
 
 def _symmetric(make, matrix):
