@@ -11,7 +11,7 @@ import pandas as pd
 from . import fetch as fetch_mod
 from .backtest import LeakSuspected, run_backtest
 from .backtest.ablation import ablation_markdown, run_ablation
-from .backtest.protocol import FINAL_FEATURE_SET, ProtocolError
+from .backtest.protocol import DEV_END, FINAL_FEATURE_SET, HOLDOUT_START, ProtocolError
 from .backtest.ratings_report import ratings_report
 from .backtest.run import default_out_dir, scored_fights
 from .build import build
@@ -215,6 +215,12 @@ def main(argv: list[str] | None = None) -> int:
                 snap = "unknown"
             out = default_out_dir(args.reports_dir, snap)
             fset = args.features_set or FINAL_FEATURE_SET or "base"
+            if (args.end is None or args.end > DEV_END) and fset != "base" and not args.ablation:
+                print(
+                    f"note: this run includes the holdout ({HOLDOUT_START} on) for the frozen "
+                    "configuration; the protocol reports it once (`ufc ratings-report`)",
+                    file=sys.stderr,
+                )
             cmd = "uv run ufc backtest" + (
                 f" --start {args.start}" if args.start != "2015-01-01" else ""
             )

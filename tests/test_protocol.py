@@ -270,11 +270,12 @@ def test_cli_rejects_end_in_a_non_canonical_form_and_ablation_with_flags(tmp_pat
     assert "do not combine" in capsys.readouterr().err
 
 
-def test_the_committed_freeze_is_a_valid_configuration_and_the_default():
-    from ufc.features import parse_feature_set
-
-    assert P.FINAL_FEATURE_SET is None or parse_feature_set(P.FINAL_FEATURE_SET) is not None
+def test_the_committed_freeze_is_the_default_and_protects_other_sets():
+    assert P.FINAL_FEATURE_SET == "all"  # frozen in the commit named in docs/results/ratings.md
     P.check_run("base", None)
-    if P.FINAL_FEATURE_SET is not None:
-        P.check_run(P.FINAL_FEATURE_SET, None)
-        P.check_run("all" if P.FINAL_FEATURE_SET != "all" else "ratings", P.DEV_END)
+    P.check_run("all", None)
+    P.check_run("ratings", P.DEV_END)
+    with pytest.raises(P.ProtocolError, match="only the frozen"):
+        P.check_run("ratings", None)
+    with pytest.raises(P.ProtocolError, match="only the frozen"):
+        P.check_run("ratings+adjusted", "2025-01-01")

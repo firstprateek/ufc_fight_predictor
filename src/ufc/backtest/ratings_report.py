@@ -9,6 +9,7 @@ text passed in, which is marked as hand-written.
 
 from __future__ import annotations
 
+import ast
 import subprocess
 import time
 from pathlib import Path
@@ -26,7 +27,6 @@ from .protocol import (
     HOLDOUT_START,
     TEST_START,
     ProtocolError,
-    check_run,
 )
 from .run import BOOTSTRAP_DRAWS, scored_fights, walk_forward
 
@@ -39,11 +39,29 @@ SHOWN = ("hgb", "logreg", "blend")
 MARKET_MODELS = ("hgb", "blend")
 
 
+def _frozen_constant(source: str):
+    """FINAL_FEATURE_SET as assigned at module level in `source` (parsed, so a comment or a
+    docstring that mentions it does not count)."""
+    for node in ast.parse(source).body:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "FINAL_FEATURE_SET"
+            and isinstance(node.value, ast.Constant)
+        ):
+            return node.value.value
+    return None
+
+
 def verify_frozen(
-    commit: str, final: str | None = FINAL_FEATURE_SET, repo: Path = Path(".")
+    commit: str,
+    final: str | None = FINAL_FEATURE_SET,
+    repo: Path = Path("."),
+    base_ref: str = "origin/master",
 ) -> str:
-    """The full sha of `commit`, after checking it is an ancestor of HEAD whose protocol.py sets the
-    frozen configuration to `final`."""
+    """The full sha of `commit`, after checking that it is merged (an ancestor of `base_ref`), is an
+    ancestor of HEAD, sets the frozen configuration to `final` in protocol.py, and that `src/` has
+    not changed since (neither committed after it nor uncommitted)."""
 
     def git(*args):
         return subprocess.run(
@@ -56,11 +74,17 @@ def verify_frozen(
     if sha.returncode:
         raise ProtocolError(f"frozen commit {commit!r} not found")
     sha = sha.stdout.strip()
+    if git("merge-base", "--is-ancestor", sha, base_ref).returncode:
+        raise ProtocolError(f"frozen commit {sha[:10]} is not merged into {base_ref}")
     if git("merge-base", "--is-ancestor", sha, "HEAD").returncode:
         raise ProtocolError(f"frozen commit {sha[:10]} is not an ancestor of HEAD")
-    src = git("show", f"{sha}:src/ufc/backtest/protocol.py").stdout
-    if f'FINAL_FEATURE_SET: str | None = "{final}"' not in src:
-        raise ProtocolError(f"frozen commit {sha[:10]} does not freeze {final!r}")
+    got = _frozen_constant(git("show", f"{sha}:src/ufc/backtest/protocol.py").stdout)
+    if got != final:
+        raise ProtocolError(f"frozen commit {sha[:10]} freezes {got!r}, not {final!r}")
+    if git("diff", "--quiet", sha, "HEAD", "--", "src").returncode:
+        raise ProtocolError(f"src/ changed after the freezing commit {sha[:10]}")
+    if git("status", "--porcelain", "--", "src").stdout.strip():
+        raise ProtocolError("uncommitted changes in src/")
     return sha
 
 
@@ -189,12 +213,12 @@ def ratings_report(
     frozen_commit: str,
     reading: str | None = None,
     repo: Path = Path("."),
+    base_ref: str = "origin/master",
 ) -> str:
     final_set = FINAL_FEATURE_SET
-    sha = verify_frozen(frozen_commit, final_set, repo)
+    sha = verify_frozen(frozen_commit, final_set, repo, base_ref)
     groups = parse_feature_set(final_set)
     name = set_name(groups)
-    check_run(final_set, None)
     t0 = time.time()
     scored = scored_fights(features, fights)
     preds = run_ablation(scored)
@@ -234,8 +258,8 @@ def ratings_report(
         f"## 2. Final configuration (`{name}`) against `base`",
         "",
         "Same fights for both. Log loss difference is final minus base with a paired-bootstrap 95% "
-        f"interval (events resampled, {BOOTSTRAP_DRAWS} draws); negative is better. The holdout was "
-        "run once, after the freeze.",
+        f"interval (events resampled, {BOOTSTRAP_DRAWS} draws); negative is better. The holdout numbers were "
+        "produced by this command after the freeze.",
         "",
         final_vs_base_markdown(final, base, name),
         "",
@@ -252,7 +276,8 @@ def ratings_report(
         "(no intercept, both orientations, no penalty) is fitted on earlier quarters' out-of-sample "
         "predictions and predicts the quarter. The holdout rows use a stack fitted on all earlier "
         "quarters, development included. A negative difference with an interval below zero would mean the "
-        "model carries information the market lacks.",
+        "model carries information the market lacks. The stack starts in 2016, so these rows cover "
+        "fewer fights than the market table (2015 is burn-in).",
         "",
         info_md,
         "",
