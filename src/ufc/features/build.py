@@ -5,12 +5,15 @@ processed one date at a time: every fight of a date is featurised from the state
 that date, and only then is the state updated. Same-day earlier bouts are ignored on purpose.
 
 `fighters` is a current snapshot, so only height, reach, stance and date of birth are used from it.
+Whether those are filled in depends on how long the fighter lasted in the UFC, so their missingness
+reveals the future: it is imputed away with static rules (see `Imputation`) and never reaches a model.
 """
 
 from __future__ import annotations
 
 import random
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date
 
 import numpy as np
@@ -39,6 +42,8 @@ METRICS = [
     "ctrled_share",  # share of fight time being controlled
 ]
 STATIC = ["height_cm", "reach_cm"]
+PHYSICAL = ["age", "height_cm", "reach_cm", "stance", "southpaw"]
+IMPUTED_STANCE = "Orthodox"
 KEYS = ["fight_id", "event_id", "date", "fighter_1_id", "fighter_2_id"]
 
 _SUMMED = [
@@ -153,21 +158,105 @@ def _history_features(hist: list[dict], on: date) -> dict:
     return out
 
 
-def _static_features(fighter: dict | None, on: date) -> dict:
+class PhysicalNullError(ValueError):
+    """A physical column holds a null: snapshot missingness would reach a model."""
+
+
+@dataclass(frozen=True)
+class Imputation:
+    """Static rules that fill the snapshot fields. They use fight dates and divisions, never results.
+
+    height: median of fighters in the same (weight class, gender), else the gender median, else the
+    global median. reach: the fighter's (possibly imputed) height x the global median reach/height
+    ratio. stance: `Orthodox`. age: the global median age at fight time.
+    """
+
+    height_global: float
+    height_gender: dict
+    height_group: dict
+    reach_ratio: float
+    age: float
+    stance: str
+    group_of: dict  # fighter_id -> (weight_class, gender), the fighter's most frequent division
+
+    def height(self, fid) -> float:
+        group = self.group_of.get(fid)
+        if group in self.height_group:
+            return self.height_group[group]
+        if group is not None and group[1] in self.height_gender:
+            return self.height_gender[group[1]]
+        return self.height_global
+
+
+def fit_imputation(fights: pd.DataFrame, fighters: pd.DataFrame) -> Imputation:
+    """Imputation constants from the full tables. Fixed for a build, so a truncated rebuild (the
+    leak check) uses the same values."""
+    long = pd.concat(
+        [
+            fights[["fighter_1_id", "weight_class", "gender", "date"]].rename(
+                columns={"fighter_1_id": "fid"}
+            ),
+            fights[["fighter_2_id", "weight_class", "gender", "date"]].rename(
+                columns={"fighter_2_id": "fid"}
+            ),
+        ]
+    )
+    group_of = {}
+    for fid, g in long.groupby("fid"):
+        counts = g.groupby(["weight_class", "gender"]).size().sort_index()
+        group_of[fid] = counts.idxmax()  # most frequent division, ties by name
+    fx = fighters.set_index("fighter_id")
+    h = fx["height_cm"].dropna().astype(float)
+    gh = pd.Series({f: group_of[f] for f in h.index if f in group_of})
+    hh = h[gh.index]
+    height_group = hh.groupby([gh.map(lambda t: t[0]), gh.map(lambda t: t[1])]).median().to_dict()
+    height_gender = hh.groupby(gh.map(lambda t: t[1])).median().to_dict()
+    both = fx[["height_cm", "reach_cm"]].dropna().astype(float)
+    ratio = float((both.reach_cm / both.height_cm).median())
+    dob = pd.to_datetime(long.fid.map(fx["dob"]), errors="coerce")
+    ages = (pd.to_datetime(long.date) - dob).dt.days / 365.25
+    return Imputation(
+        height_global=float(h.median()),
+        height_gender={k: float(v) for k, v in height_gender.items()},
+        height_group={k: float(v) for k, v in height_group.items()},
+        reach_ratio=ratio,
+        age=float(ages.dropna().median()),
+        stance=IMPUTED_STANCE,
+        group_of=group_of,
+    )
+
+
+def _static_features(fid, fighter: dict | None, on: date, imp: Imputation) -> dict:
+    """Physical features with every missing snapshot field imputed (never null)."""
     f = fighter or {}
     dob = f.get("dob")
-    age = None
     if dob is not None and not pd.isna(dob):
         age = (on - date.fromisoformat(dob)).days / 365.25
+    else:
+        age = imp.age
+    height = _num(f.get("height_cm"))
+    if height is None:
+        height = imp.height(fid)
+    reach = _num(f.get("reach_cm"))
+    if reach is None:
+        reach = height * imp.reach_ratio
     stance = f.get("stance")
-    stance = None if stance is None or pd.isna(stance) else stance
+    stance = imp.stance if stance is None or pd.isna(stance) else stance
     return {
         "age": age,
-        "height_cm": _num(f.get("height_cm")),
-        "reach_cm": _num(f.get("reach_cm")),
+        "height_cm": height,
+        "reach_cm": reach,
         "stance": stance,
-        "southpaw": None if stance is None else float(stance == "Southpaw"),
+        "southpaw": float(stance == "Southpaw"),
     }
+
+
+def check_physical(df: pd.DataFrame) -> None:
+    """Raise if any physical column (per fighter or diff) has a null."""
+    cols = [f"{p}_{c}" for p in ("f1", "f2", "diff") for c in PHYSICAL if f"{p}_{c}" in df.columns]
+    bad = [c for c in cols if df[c].isna().any()]
+    if bad:
+        raise PhysicalNullError(f"null in physical columns {bad}: snapshot missingness would leak")
 
 
 def _elo_expected(r1: float, r2: float) -> float:
@@ -197,9 +286,14 @@ def swap_orientation(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_features(
-    fights: pd.DataFrame, stats: pd.DataFrame, fighters: pd.DataFrame
+    fights: pd.DataFrame,
+    stats: pd.DataFrame,
+    fighters: pd.DataFrame,
+    imputation: Imputation | None = None,
 ) -> pd.DataFrame:
-    """One row per fight: KEYS, `f1_*`, `f2_*` and `diff_*` (= f1 minus f2) columns."""
+    """One row per fight: KEYS, `f1_*`, `f2_*` and `diff_*` (= f1 minus f2) columns.
+    `imputation` defaults to constants fitted on `fights` and `fighters`."""
+    imp = imputation or fit_imputation(fights, fighters)
     fights = fights.sort_values(["date", "event_id", "bout_order"], kind="stable")
     totals = _fight_totals(stats)
     static = fighters.set_index("fighter_id").to_dict("index")
@@ -215,7 +309,10 @@ def build_features(
             row = {k: r[k] for k in KEYS}
             parts = {}
             for side, fid in (("f1", r["fighter_1_id"]), ("f2", r["fighter_2_id"])):
-                f = {**_history_features(history[fid], on), **_static_features(static.get(fid), on)}
+                f = {
+                    **_history_features(history[fid], on),
+                    **_static_features(fid, static.get(fid), on, imp),
+                }
                 f["elo"] = elo[fid]
                 parts[side] = f
                 row.update({f"{side}_{k}": v for k, v in f.items()})
@@ -278,6 +375,7 @@ def check_truncation(
     """Leak guard. For a random sample of fights, rebuild the features with every fight dated on or
     after the sampled fight removed (except the fight itself) and require an identical row.
     Returns the fight_ids that differ."""
+    imp = fit_imputation(fights, fighters)  # fixed from the full tables, as in the full build
     ids = sorted(fights.fight_id)
     picks = random.Random(seed).sample(ids, min(sample, len(ids)))
     by_id = fights.set_index("fight_id")
@@ -286,7 +384,7 @@ def check_truncation(
     for fid in picks:
         d = by_id.at[fid, "date"]
         keep = fights[(fights.date < d) | (fights.fight_id == fid)]
-        part = build_features(keep, stats[stats.fight_id.isin(keep.fight_id)], fighters)
+        part = build_features(keep, stats[stats.fight_id.isin(keep.fight_id)], fighters, imp)
         a = part.set_index("fight_id").loc[fid]
         b = full.loc[fid]
         same = all((pd.isna(a[c]) and pd.isna(b[c])) or a[c] == b[c] for c in full.columns)

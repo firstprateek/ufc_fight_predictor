@@ -21,6 +21,23 @@ The 2018 class project is kept under `legacy/2018/` for history only. Nothing in
 4. **Raw first.** Every fetched file is kept on disk untouched. Parsing reads that copy, so parsers can
    be fixed and re-run without re-fetching.
 5. **Small and boring.** About 8,000 fights. Plain Python, well-known libraries, runs on one Mac.
+6. **Snapshot fields carry survivorship.** `fighters` is today's snapshot. Whether a fighter's reach,
+   stance, height or date of birth is filled in depends on how long they lasted in the UFC, so its
+   missingness reveals the future. It must never be a model input: no missing flags, no nulls the
+   model can branch on. The physical fields are imputed with static rules that use no fight results
+   (see Features), and `ufc features` fails if any physical column holds a null. Evidence (found in
+   milestone 2, measured on decided fights where exactly one fighter has the value; the share is how
+   often the fighter with the value won):
+
+   | Field | 2010-2014 | 2015-2016 | 2017-2019 | 2020-2026 |
+   |---|---|---|---|---|
+   | reach | 261 of 1,748 fights, 93% | 120 of 947, 98% | 23 of 1,421, 91% | 93 of 3,477, 46% |
+   | stance | 24, 88% | 19, 100% | 1, 100% | 83, 46% |
+   | age | 8, 88% | 0 | 0 | 10, 60% |
+   | height | 3, 100% | 0 | 0 | 94, 46% |
+
+   The first baseline exploited this (the tree model's log loss was 0.590 in 2015 and drifted to about
+   0.65 later) and the truncation check cannot see it, because the snapshot is not truncated.
 
 ## Layout
 
@@ -108,11 +125,10 @@ joins `fights`. Target (later): `p_f1`, the probability that `fighter_1_id` wins
 **Point-in-time rule.** Fights are processed one date at a time. Every fight of a date is featurised
 from the state before that date, then the state is updated. So a fight sees only fights dated strictly
 earlier; same-day earlier bouts (old tournament nights) are ignored on purpose. `fighters` is a current
-snapshot: only `height_cm`, `reach_cm`, `stance` and `dob` are used from it. Known limitation: these
-are today's values, so a reach or stance changed after a fight is not seen as it was then, and the
-truncation guard (which truncates fights and stats, not the snapshot) cannot detect that. Also,
-`reach_cm` is null for most fights before about 2010 and almost none after 2018, so its missingness
-proxies the era.
+snapshot: only `height_cm`, `reach_cm`, `stance` and `dob` are used from it, and never their
+missingness (principle 6). Known limitation: these are today's values, so a reach or stance changed
+after a fight is not seen as it was then, and the truncation guard (which truncates fights and stats,
+not the snapshot) cannot detect that.
 
 Features (each exists as `f1_x`, `f2_x`, `diff_x` unless noted):
 
@@ -122,7 +138,18 @@ Features (each exists as `f1_x`, `f2_x`, `diff_x` unless noted):
   `TKO - Doctor's Stoppage` are KO; `Submission` is submission; everything else (decisions, DQ, could not
   continue, overturned, other) is neither.
 - Physical: `age` (years at fight date from `dob`), `height_cm`, `reach_cm`, `stance` (strings, no diff)
-  and `southpaw` (1.0 / 0.0, null if stance unknown).
+  and `southpaw` (1.0 / 0.0). These are never null: a missing snapshot value is imputed by a static
+  rule fitted once on the full tables, using fight dates and divisions but no results. height: median
+  height of fighters in the same weight class and gender (a fighter's class and gender are those of
+  their most frequent division; fall back to the gender median, then the global median). reach: the
+  fighter's (possibly imputed) height times the global median reach-to-height ratio. stance:
+  `Orthodox`. age: the global median age at fight time. Diffs are computed after imputation.
+  `ufc features` exits non-zero if any physical column (per fighter or diff) contains a null. The
+  leak check reuses the constants fitted on the full tables. The constants and each fighter's
+  division use fight dates and divisions of all fights, including later ones (no results), which
+  the truncation check cannot see. Known limitation: an imputed value is a constant, so a tree can
+  still isolate the exact imputed age (and reach = imputed height x ratio); residual signal of this
+  kind is not yet measured or removed.
 - Rates, each as `x_career` (ratio of sums over all prior fights with the stat) and `x_ewm`
   (exponentially weighted, **half-life 3 fights**: the most recent prior fight has weight 1, the one
   before 0.5^(1/3), and so on): `slpm`, `sapm` (significant strikes landed / absorbed per minute),
@@ -157,7 +184,8 @@ Models (hyperparameters fixed in `backtest/models.py`, never tuned on the test p
 2. `elo`: Elo expected score from the pre-fight ratings (K = 32, see above).
 3. `logreg`: logistic regression (C = 1) on `diff_elo`, `diff_age`, `diff_reach_cm`,
    `diff_n_fights`, `diff_win_rate` and the striking differential (`diff_slpm_career - diff_sapm_career`);
-   train-set median imputation with missing flags, then standard scaling.
+   train-set median imputation with missing flags, then standard scaling. The physical inputs are never
+   null, so no flag can encode snapshot missingness; flags remain only for history features (debutants).
 4. `hgb`: scikit-learn `HistGradientBoostingClassifier` (200 iterations, learning rate 0.05, max depth
    3, min 40 samples per leaf, L2 1.0, no early stopping, seed 0) on every numeric `f1_`/`f2_`/`diff_`
    column; nulls are handled natively. Columns with fewer than two distinct training values are dropped.
