@@ -12,6 +12,7 @@ from . import fetch as fetch_mod
 from .backtest import LeakSuspected, run_backtest
 from .backtest.ablation import ablation_markdown, run_ablation
 from .backtest.protocol import FINAL_FEATURE_SET, ProtocolError
+from .backtest.ratings_report import ratings_report
 from .backtest.run import default_out_dir, scored_fights
 from .build import build
 from .features import (
@@ -84,6 +85,15 @@ def main(argv: list[str] | None = None) -> int:
         help="tune the rating constants on fights before a cutoff (default 2015-01-01)",
     )
     tr.add_argument("--before", default=TUNE_CUTOFF, help="use only fights dated before this day")
+    rr = sub.add_parser(
+        "ratings-report",
+        help="write docs/results/ratings.md for the frozen configuration (runs the holdout once)",
+    )
+    rr.add_argument(
+        "--frozen-commit", required=True, help="the commit that froze the configuration"
+    )
+    rr.add_argument("--reading", type=Path, help="hand-written text to append (marked as such)")
+    rr.add_argument("--out", type=Path, default=Path("docs/results/ratings.md"))
     bt = sub.add_parser("backtest", help="walk-forward backtest and report")
     bt.add_argument("--start", default="2015-01-01", help="first day of the test period")
     bt.add_argument(
@@ -150,6 +160,27 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
                 n = min(args.sample, len(feats))
                 print(f"truncation invariance holds on {n} sampled fights")
+        elif args.cmd == "ratings-report":
+            t = load_tables(processed)
+            feats = pd.read_parquet(processed / "features.parquet")
+            check_physical(feats)
+            odds_path = processed / "odds.parquet"
+            if not odds_path.exists():
+                raise FileNotFoundError("no odds.parquet: run `ufc fetch` and `ufc build` first")
+            osnap = fetch_mod.latest_odds_snapshot(raw)
+            text = ratings_report(
+                feats,
+                t["fights"],
+                t["fight_stats_round"],
+                pd.read_parquet(odds_path),
+                snapshot=fetch_mod.latest_snapshot(raw).name,
+                odds_snapshot=osnap.name if osnap else "unknown",
+                frozen_commit=args.frozen_commit,
+                reading=args.reading.read_text() if args.reading else None,
+            )
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(text)
+            print(f"wrote {args.out}")
         elif args.cmd == "tune-ratings":
             t = load_tables(processed)
             params, diag = tune_ratings(t["fights"], t["fight_stats_round"], args.before)

@@ -14,6 +14,7 @@ uv run ufc features --check   # point-in-time features.parquet, plus the leak ch
 uv run ufc tune-ratings --before 2015-01-01   # re-derive the committed rating constants from pre-2015 fights
 uv run ufc backtest   # walk-forward backtest incl. the market benchmark; report in reports/, summaries in docs/results/baseline.md and docs/results/market.md
 uv run ufc backtest --end 2022-12-31 --features-set base   # development period only; --ablation runs every feature set there
+uv run ufc ratings-report --frozen-commit <sha>   # docs/results/ratings.md: ablation, final vs base on development and holdout, market (about 4 min)
 uv run pytest         # offline tests
 ```
 
