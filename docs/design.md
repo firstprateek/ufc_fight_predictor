@@ -240,13 +240,17 @@ construction, the truncation check (a 200-fight sample) and the tests that flip 
 ### Evaluation protocol (`ufc backtest --end`, `--features-set`, `--ablation`)
 
 - `ufc backtest --end YYYY-MM-DD` ends the test period at that date. Fights after it are dropped before
-  fitting, so nothing later can influence a result (tested by changing later labels and features).
+  fitting, so no later label or feature row can influence a result (tested by changing both). The feature table
+  itself is outside that guarantee: the imputation constants are fitted on all fights, results excluded
+  (see Features).
 - `ufc backtest --features-set <set>` runs a feature set: `base` (the features above), `ratings`,
   `adjusted`, `context` (each is `base` plus that group), `all`, or a join such as `ratings+adjusted`.
   A column belongs to a group by name (`glicko_*` and `welo`; `adj_*`; `ctx_*`). For a set, `hgb` uses
   every numeric column of the set; logistic regression uses its base inputs plus `diff_glicko_r` and
   `diff_welo` (ratings) and the five `diff_adj_<dimension>_exp` expected differentials (adjusted).
-  Hyperparameters of `hgb` and logistic regression do not change.
+  Hyperparameters of `hgb` and logistic regression do not change. The `context` group adds no
+  logistic-regression input, so its `logreg` rows equal `base` and its `blend` rows differ from `base`
+  only through `hgb`.
 - `blend` is the mean of the logits of `hgb` and logistic regression (a prediction-level average, no
   extra fit); it has its own row in the tables and its own information test.
 - `ufc backtest --ablation` runs `base`, `ratings`, `adjusted`, `context` and `all` on the development

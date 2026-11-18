@@ -90,8 +90,9 @@ def test_protocol_refuses_unfrozen_sets_past_development():
     P.check_run("ratings+adjusted", None, final="adjusted+ratings")
     with pytest.raises(P.ProtocolError, match="only the frozen"):
         P.check_run("all", None, final="ratings+adjusted")
-    with pytest.raises(P.ProtocolError, match="YYYY-MM-DD"):
-        P.check_run("base", "2022/12/31")
+    for bad in ("2022/12/31", "20230101", "2023-W01-1", "2023-1-1"):
+        with pytest.raises(P.ProtocolError, match="YYYY-MM-DD"):
+            P.check_run("base", bad)
 
 
 def test_run_backtest_enforces_the_protocol(data, tmp_path):
@@ -148,10 +149,26 @@ def test_models_for_a_set_use_its_columns_only(data, monkeypatch):
         return real(self, X, y, *a, **k)
 
     monkeypatch.setattr(BM.HistGradientBoostingClassifier, "fit", spy)
+    real_lr = BM.LogisticRegression.fit
+
+    def spy_lr(self, X, y, *a, **k):
+        seen["logreg"] = X.shape[1]
+        return real_lr(self, X, y, *a, **k)
+
+    monkeypatch.setattr(BM.LogisticRegression, "fit", spy_lr)
     for groups in ((), ("ratings",), ("adjusted", "context")):
         models_for(groups)["hgb"](train, train.y.to_numpy(), test)
         want = [c for c in feature_columns(train, groups) if train[c].astype(float).nunique() >= 2]
         assert seen["hgb"] == len(want)
+        models_for(groups)["logreg"](train, train.y.to_numpy(), test)
+        # the fitted width grows by exactly the group's extra inputs (the synthetic extras have no
+        # missing values, so the imputer adds no indicator for them)
+        if not groups:
+            seen["logreg_base"] = seen["logreg"]
+        else:
+            assert seen["logreg"] - seen["logreg_base"] == len(BM.logreg_inputs(groups)) - len(
+                BM.LOGREG_DIFFS
+            )
     assert BM.logreg_inputs(()) == BM.LOGREG_DIFFS
     assert BM.logreg_inputs(("ratings",))[-2:] == ["diff_glicko_r", "diff_welo"]
     assert BM.logreg_inputs(("adjusted",))[-5:] == [f"diff_adj_{d}_exp" for d in DIMENSIONS]
@@ -245,3 +262,20 @@ def test_cli_refuses_an_unfrozen_set_past_development(tmp_path, capsys):
     assert "rebuild with `ufc features`" in capsys.readouterr().err
     assert main([*args, "--features-set", "nonsense", "--end", "2022-12-31"]) == 1
     assert "unknown feature set" in capsys.readouterr().err
+
+
+def test_cli_rejects_end_in_a_non_canonical_form_and_ablation_with_flags(tmp_path, capsys):
+    from pathlib import Path
+
+    from ufc.build import build
+    from ufc.cli import main
+
+    fix = Path(__file__).parent / "fixtures"
+    build(fix / "source", tmp_path / "processed", fix / "overrides")
+    assert main(["--data-dir", str(tmp_path), "features"]) == 0
+    capsys.readouterr()
+    args = ["--data-dir", str(tmp_path), "backtest", "--reports-dir", str(tmp_path / "rep")]
+    assert main([*args, "--end", "20230101"]) == 1
+    assert "YYYY-MM-DD" in capsys.readouterr().err
+    assert main([*args, "--ablation", "--end", "2020-12-31"]) == 1
+    assert "do not combine" in capsys.readouterr().err

@@ -159,6 +159,11 @@ def main(argv: list[str] | None = None) -> int:
             cmd += f" --end {args.end}" if args.end else ""
             cmd += f" --features-set {args.features_set}" if args.features_set else ""
             if args.ablation:
+                if args.end or args.features_set or args.start != "2015-01-01":
+                    raise ProtocolError(
+                        "--ablation runs every feature set on the fixed development period; "
+                        "do not combine it with --start, --end or --features-set"
+                    )
                 scored = scored_fights(feats, t["fights"])
                 preds = run_ablation(scored)
                 md, kept = ablation_markdown(preds)

@@ -27,10 +27,13 @@ class ProtocolError(Exception):
 
 
 def check_date(name: str, value: str) -> None:
+    # dates are compared as strings, so only the canonical form is allowed
     try:
-        date.fromisoformat(value)
+        ok = date.fromisoformat(value).isoformat() == value
     except ValueError:
-        raise ProtocolError(f"{name} must be YYYY-MM-DD, got {value!r}") from None
+        ok = False
+    if not ok:
+        raise ProtocolError(f"{name} must be YYYY-MM-DD, got {value!r}")
 
 
 def check_run(features_set: str, end: str | None, final: str | None = None) -> None:
