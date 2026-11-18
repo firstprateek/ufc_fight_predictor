@@ -229,8 +229,8 @@ construction, the truncation check (a 200-fight sample) and the tests that flip 
 
 ## Milestone 3: market odds
 
-The betting market is the benchmark the models are measured against. This part builds the odds table;
-the benchmark itself is described in the next section once it lands.
+The betting market is the benchmark the models are measured against. It has two parts: the odds table
+(below) and the benchmark in the backtest ("Against the market", after it).
 
 Source: GitHub `shortlikeafox/ultimate_ufc_dataset` (Apache-2.0), file `ufc-master.csv` at the repo root
 (7,177 fights from 2010-03-21 to 2026-03-28 at the pinned commit). Odds are American moneylines in
@@ -266,6 +266,28 @@ dropped, counted and listed: they are corrupt prices, for example two long under
 fight; every `fight_id` exists in `fights`. `ufc validate` re-checks the built table. The build prints
 coverage per year (source rows with odds, matched, unmatched) and the share of scored fights (decided,
 from 2015-01-01) that have odds.
+
+### Against the market (`ufc backtest`, `docs/results/market.md`)
+
+`market` is a fifth model whose prediction is `p_market_f1`; it needs no training and has no row in the
+all-fights tables, which are unchanged (`MODELS` does not contain it, and no other model ever sees the odds,
+so odds are not a feature). The backtest loads `odds.parquet` if it exists and adds an "Against the market"
+section scored only on test-period fights that have odds, the same fights for every model: overall and
+per-year log loss, Brier, accuracy and ECE, a calibration table for the market, and a paired bootstrap
+(events resampled, 1,000 draws, 95%) of each model's log loss minus the market's. Expect the market to win.
+
+The market favourite should win roughly 65% of the time. The 75% accuracy tripwire applies to `market`
+too (on the fights with odds); a market that looks much better or much worse than 65% is first suspected
+of an orientation or matching bug.
+
+**Information test.** It answers "does our model know anything the market does not?". Each quarter from
+2016 (2015 is burn-in), a logistic regression on two inputs, the logit of `p_market_f1` and the logit of the
+`hgb` prediction, is fitted on the out-of-sample predictions of earlier quarters only (fights with odds,
+both orientations, no intercept, no penalty), and predicts the quarter. Its log loss is compared with the
+market alone on the same fights (paired bootstrap), and the final quarter's coefficients are reported.
+A stack that beats the market with an interval below zero would mean `hgb` carries information the market
+lacks; an interval including zero means no evidence of that. This is a diagnostic, not a model for
+betting: no return-on-investment simulation is done.
 
 ## Later
 

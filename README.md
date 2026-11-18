@@ -3,7 +3,7 @@
 Predicts the winner of UFC fights with calibrated probabilities, judged by log loss on fights the model
 has not seen. Milestone 1 (this state of the repo) is the data pipeline: it downloads a public dataset
 of ufcstats.com results and turns it into four validated Parquet tables (`events`, `fights`,
-`fight_stats_round`, `fighters`). Milestone 2 adds point-in-time features (`ufc features`) and a walk-forward backtest of four baselines (`ufc backtest`); results in [`docs/results/baseline.md`](docs/results/baseline.md).
+`fight_stats_round`, `fighters`). Milestone 2 adds point-in-time features (`ufc features`) and a walk-forward backtest of four baselines (`ufc backtest`); results in [`docs/results/baseline.md`](docs/results/baseline.md). Models are also scored against the betting market ([`docs/results/market.md`](docs/results/market.md)).
 
 ```
 uv sync
@@ -11,7 +11,7 @@ uv run ufc fetch      # download the source CSVs (six small files) and the odds 
 uv run ufc build      # build data/processed/*.parquet (including odds.parquet) and validate them
 uv run ufc validate   # re-run validation on the built tables
 uv run ufc features --check   # point-in-time features.parquet, plus the leak check (about 2 min)
-uv run ufc backtest   # walk-forward backtest; report in reports/, summary in docs/results/baseline.md
+uv run ufc backtest   # walk-forward backtest incl. the market benchmark; report in reports/, summaries in docs/results/baseline.md and docs/results/market.md
 uv run pytest         # offline tests
 ```
 

@@ -232,3 +232,95 @@ def test_report_counts_flagged_fights(flagged_data, tmp_path):
     assert "excluded from training, all history" in text
     assert "last training fold" in text and "carrying a flag" in text
     assert "| hgb | flagged |" in text and "| logreg | unflagged |" in text
+
+
+# --- market benchmark ---------------------------------------------------------------------------
+
+
+def fake_odds(s, noise=0.5, seed=3):
+    """Odds for every scored fight but every 5th: the true win probability seen through noise."""
+    rng = np.random.default_rng(seed)
+    p = 1 / (1 + 10 ** (-s.diff_elo.to_numpy() / 400))
+    z = np.log(p / (1 - p)) + rng.normal(0, noise, len(s))
+    odds = pd.DataFrame({"fight_id": s.fight_id, "p_market_f1": 1 / (1 + np.exp(-z))})
+    return odds.iloc[np.arange(len(odds)) % 5 != 0].reset_index(drop=True)
+
+
+def test_market_model_is_the_odds_probability_and_orientation_symmetric():
+    from ufc.backtest.models import market
+
+    t = pd.DataFrame({"p_market_f1": [0.7, 0.2, np.nan]})
+    np.testing.assert_allclose(market(None, None, t), [0.7, 0.2, np.nan])
+    flipped = t.assign(p_market_f1=1 - t.p_market_f1)
+    np.testing.assert_allclose(
+        market(None, None, t) + market(None, None, flipped), [1.0, 1.0, np.nan]
+    )
+    assert "market" not in MODELS  # the all-fights tables are unchanged
+
+
+def test_market_column_is_scored_only_with_odds_and_never_reaches_models(data):
+    fights, feats = data
+    s = scored_fights(feats, fights)
+    odds = fake_odds(s)
+    base = walk_forward(s, "2015-01-01")
+    pred = walk_forward(s, "2015-01-01", odds)
+    cols = [f"p_{m}" for m in MODELS]
+    pd.testing.assert_frame_equal(base[cols], pred[cols], check_exact=True)  # models untouched
+    assert pred.p_market.notna().sum() == pred.fight_id.isin(odds.fight_id).sum() > 100
+    assert not any("market" in c for c in feature_columns(feats))
+    m = pred.set_index("fight_id").p_market.dropna()
+    np.testing.assert_allclose(m, odds.set_index("fight_id").p_market_f1.loc[m.index])
+
+
+def test_stack_trains_only_on_earlier_quarters_and_is_symmetric():
+    from ufc.backtest import market as MK
+
+    rng = np.random.default_rng(0)
+    n = 900
+    q = np.repeat(pd.period_range("2015Q1", periods=9, freq="Q").astype(str), n // 9)
+    pm = rng.uniform(0.2, 0.8, n)
+    pred = pd.DataFrame(
+        {
+            "quarter": [f"{x[:4]}-{(int(x[-1]) - 1) * 3 + 1:02d}-01" for x in q],
+            "p_market": pm,
+            "p_hgb": np.clip(pm + rng.normal(0, 0.1, n), 0.05, 0.95),
+            "y": (rng.uniform(size=n) < pm).astype(int),
+            "event_id": np.arange(n) // 3,
+            "fight_id": np.arange(n),
+        }
+    )
+    pred["date"] = pred.quarter
+    st, coef, last = MK.stacked_walk_forward(pred)
+    assert st.date.min() >= MK.STACK_START and last == "2017-01-01" and len(coef) == 2
+    # market is calibrated here, so the stack should lean on it, not on the noisy copy
+    assert coef[0] > coef[1]
+    # a future label changes nothing earlier
+    flipped = pred.copy()
+    flipped.loc[flipped.quarter >= "2016-07-01", "y"] = 1 - flipped.y
+    st2, _, _ = MK.stacked_walk_forward(flipped)
+    early = st.quarter < "2016-07-01"
+    np.testing.assert_allclose(st.p_stack[early], st2.p_stack[st2.quarter < "2016-07-01"])
+
+
+def test_run_writes_market_sections(data, tmp_path):
+    fights, feats = data
+    odds = fake_odds(scored_fights(feats, fights))
+    overall = run_backtest(
+        feats, fights, "2015-01-01", tmp_path / "r", "abc", "uv run ufc backtest", odds, "osha"
+    )
+    assert overall["market"]["accuracy"] < 0.75
+    text = (tmp_path / "r" / "report.md").read_text()
+    assert "Against the market" in text and "Information test" in text
+    assert "minus the market" in text and "Calibration of the market" in text
+    mk = (tmp_path / "r" / "market.md").read_text()
+    assert "odds snapshot: `osha`" in mk and "data snapshot: `abc`" in mk and "Coefficients" in mk
+    # the existing all-fights section is unchanged in shape
+    assert "### Log loss minus Elo" in text and "| market |" in text
+
+
+def test_market_tripwire_fires_on_odds_that_know_the_result(data, tmp_path):
+    fights, feats = data
+    s = scored_fights(feats, fights)
+    leak = pd.DataFrame({"fight_id": s.fight_id, "p_market_f1": np.where(s.y == 1, 0.9, 0.1)})
+    with pytest.raises(LeakSuspected, match="market"):
+        run_backtest(feats, fights, "2015-01-01", tmp_path / "r", odds=leak)

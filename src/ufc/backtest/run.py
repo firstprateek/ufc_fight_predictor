@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from ..features import swap_orientation
+from . import market as MK
 from . import metrics as M
 from .models import MODELS, LeakSuspected, flagged
 
@@ -29,7 +30,9 @@ def _quarter_start(d: str) -> str:
     return f"{d[:4]}-{q:02d}-01"
 
 
-def walk_forward(scored: pd.DataFrame, start: str) -> pd.DataFrame:
+def walk_forward(
+    scored: pd.DataFrame, start: str, odds: pd.DataFrame | None = None
+) -> pd.DataFrame:
     """For each calendar quarter from `start`, fit every model on scored fights dated before the
     quarter starts and predict the quarter. Returns one row per test fight with a p_<model> column."""
     qstart = scored.date.map(_quarter_start)
@@ -51,6 +54,8 @@ def walk_forward(scored: pd.DataFrame, start: str) -> pd.DataFrame:
                 p_swapped = model(train, train.y.to_numpy(), sw)
                 if not np.allclose(p + p_swapped, 1.0, atol=1e-9):
                     raise LeakSuspected(f"{name}: swapping fighters did not give 1 - p")
+        if odds is not None:  # the market column goes on the result only, never into a model input
+            part = MK.add_market(part, odds)
         out.append(part)
     if not out:
         raise ValueError(f"no scored fights on or after {start}")
@@ -186,10 +191,12 @@ def run_backtest(
     out_dir: Path | None,
     snapshot: str = "unknown",
     command: str = "uv run ufc backtest",
+    odds: pd.DataFrame | None = None,
+    odds_snapshot: str = "unknown",
 ) -> dict:
     """Run the walk-forward backtest, write the report, and enforce the leak tripwire."""
     scored = scored_fights(features, fights)
-    pred = walk_forward(scored, start)
+    pred = walk_forward(scored, start, odds)
     last_q = pred.quarter.max()
     train_last = scored[scored.date < last_q]
     info = {
@@ -200,11 +207,32 @@ def run_backtest(
         "excluded_last": int(flagged(train_last).sum()),
     }
     md, overall = report_markdown(pred, start, snapshot, command, len(features), info)
+    market_md = None
+    if odds is not None:
+        market_md = MK.market_markdown(pred, len(pred))
+        md += "\n" + market_md
     if out_dir is not None:
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "report.md").write_text(md + "\n")
         pred.to_parquet(out_dir / "predictions.parquet", index=False)
+        if market_md is not None:
+            head = (
+                "# Market benchmark\n\n"
+                f"- odds snapshot: `{odds_snapshot}` (`ufc-master.csv`, pre-fight moneyline, book and "
+                "timing unknown)\n"
+                f"- data snapshot: `{snapshot}`\n"
+                f"- command: `{command}`\n"
+                f"- test period: {pred.date.min()} to {pred.date.max()}, scored by the same "
+                "walk-forward fits as the baseline report\n\n"
+            )
+            (out_dir / "market.md").write_text(head + market_md + "\n")
     too_good = {m: s["accuracy"] for m, s in overall.items() if s["accuracy"] > TRIPWIRE_ACCURACY}
+    if odds is not None:  # the market is a model too: the same tripwire, on the fights with odds
+        sub = MK.market_subset(pred)
+        acc = MK.market_summary(sub)[MK.MARKET]["accuracy"]
+        if acc > TRIPWIRE_ACCURACY:
+            too_good[MK.MARKET] = acc
+        overall = {**overall, MK.MARKET: MK.market_summary(sub)[MK.MARKET]}
     if too_good:
         raise LeakSuspected(
             f"accuracy above {TRIPWIRE_ACCURACY:.0%} for {too_good}: a leak is likely "
