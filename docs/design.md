@@ -399,7 +399,7 @@ betting: no return-on-investment simulation is done.
 
 `ufc predict` gives a win probability for a fight that has not happened. The source data holds
 completed fights only and there is no upcoming-card source, so the person running the command names the
-fights. Out of scope here: fetching cards or live odds, scoring the log (below), method and round
+fights. Out of scope here: fetching cards or live odds, method and round
 prediction, anything that changes the features, the models, their hyperparameters or the frozen
 configuration.
 
@@ -469,7 +469,49 @@ and a file with another header is refused, never rewritten. Columns: `run_utc`, 
 `code_commit` (`-dirty` if `git status` shows any change, tracked or not), `fighter_1_id`, `fighter_1_name`,
 `fighter_2_id`, `fighter_2_name`, `date`, `weight_class`, `scheduled_rounds`, `is_title`, `p_blend_1`,
 `p_hgb_1`, `p_logreg_1` (all for the first-typed fighter) and `odds_1`, `odds_2` (empty when not given).
-Scoring the log against results is not built.
+**Scoring the log: `ufc score-log`.** The 2023 to 2026 holdout has been used, so from now on the only
+fair test of the model is a prediction written down before a fight and scored afterwards. The command
+reads the log and the built `fights` table and never writes to the log:
+
+```
+ufc score-log [--log PATH] [--json] [--out FILE]
+```
+
+- **Matching.** A row matches the earliest fight in `fights` between the same two fighter ids (either
+  order) dated on or after the UTC date of the row's `run_utc` and at most 45 days after the row's
+  logged `date` (`MATCH_WINDOW_DAYS`). A fight dated before the run is never a match, so a backdated
+  replay cannot count; a rematch matches the first fight on or after the run.
+- **Eligibility.** The UTC date of `run_utc` must be strictly before the matched fight's date. A row
+  written on the fight's date or later is "logged too late" and never scored: log at least the day
+  before. A row written after a fight between the pair that fell in the logged date's window (45 days
+  either side) is also "logged too late".
+  The window has no lower bound beyond the run date: a row that names a date long after the fight it
+  matches is still matched to that earlier fight. A row whose pair fought only after the window is
+  `did not happen`, and its reason says so. The row's day is the UTC date and the fight's `date` is the
+  local date of the event, so a row written late on the UTC day before an early-morning fight far east
+  can count although the fight was nearly over; log earlier than the last day if that matters.
+- **One prediction per fight.** Among eligible rows matching one fight the latest `run_utc` is scored
+  (file order breaks a tie) and the earlier ones are reported as superseded. The choice never looks at
+  the probability or the outcome.
+- **Statuses**, exactly one per row: `scored`; `superseded`; `logged too late`; `pending` (no fight yet
+  and the logged date plus 45 days is not before the latest fight date in the data, so the data decides,
+  not the clock); `did not happen` (that window has passed with no fight); `no decision` (a draw or no
+  contest: listed, not scored).
+- **Scoring.** The outcome is 1 when `winner_id` is the row's `fighter_1_id`. For the blend, `hgb` and
+  logistic regression: fights, log loss, Brier score and accuracy (`backtest.metrics`), beside the coin
+  flip (0.6931, 0.2500). On scored rows with both prices: the market probability with the margin
+  removed, its log loss and accuracy, the blend's on the same rows, and blend minus market in log loss
+  with the paired bootstrap interval over events (1,000 draws, seed 0, as in the backtest; skipped with
+  a reason when there are fewer than 2 events). A per-fight table, the status counts, the unscored rows
+  with their reasons, and the number of distinct commits and snapshots among the scored rows (rows from a
+  `-dirty` or `unknown` commit are counted, not excluded) follow.
+- **What small samples do and do not show.** Under 200 scored fights (`MIN_SCORED_FIGHTS`) the report says
+  so: that is too few to tell the model from a coin flip or from the market, and the backtest result
+  (market 0.6092 against 0.6474 over 5,179 fights) remains the best evidence. Nothing here is a
+  conclusion until the sample is large; the report states no recommendation of any kind.
+- **Bad input.** A missing or empty log prints a message and exits 0. A header other than
+  `LOG_COLUMNS`, an unknown fighter id, a probability outside (0, 1), an unreadable date, or prices that
+  are not a consistent pair fail naming the line; no row is skipped silently.
 
 ## Results of the ratings task
 

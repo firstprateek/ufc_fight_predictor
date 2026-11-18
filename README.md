@@ -14,6 +14,20 @@ uv run ufc predict "Fighter A" "Fighter B" [--date YYYY-MM-DD] [--weight-class N
 uv run ufc predict --card card.csv     # one row per fight; see examples/card.csv
 ```
 
+Weekly routine, three commands:
+
+```
+uv run ufc fetch && uv run ufc build                 # 1. refresh the data
+uv run ufc predict --card card.csv --log             # 2. before the event, at least the day before
+uv run ufc score-log                                 # 3. after the next refresh
+```
+
+`ufc score-log` scores `predictions/log.csv` against what happened. A row counts only if it was
+written on an earlier day than the fight; one prediction per fight (the latest); draws and no contests
+are listed, not scored. Until about 200 fights are scored it says the sample is too small to tell the
+model from a coin flip or from the market. It never changes the log (`--json`, `--out FILE`, `--log PATH`
+are available). The rules are in `docs/design.md`, Milestone 4.
+
 The data holds completed fights only, so you name the fight. The probability comes from the same
 features and the same `blend` model as the backtest, trained on every decided fight before `--date`
 (default: today). Names ignore case and accents; a name shared by two fighters is refused with their
