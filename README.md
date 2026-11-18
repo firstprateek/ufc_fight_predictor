@@ -7,8 +7,8 @@ of ufcstats.com results and turns it into four validated Parquet tables (`events
 
 ```
 uv sync
-uv run ufc fetch      # download the source CSVs (six small files) into data/raw/
-uv run ufc build      # build data/processed/*.parquet and validate them
+uv run ufc fetch      # download the source CSVs (six small files) and the odds file into data/raw/
+uv run ufc build      # build data/processed/*.parquet (including odds.parquet) and validate them
 uv run ufc validate   # re-run validation on the built tables
 uv run ufc features --check   # point-in-time features.parquet, plus the leak check (about 2 min)
 uv run ufc backtest   # walk-forward backtest; report in reports/, summary in docs/results/baseline.md
@@ -16,7 +16,8 @@ uv run pytest         # offline tests
 ```
 
 The data comes from the public `Greco1899/scrape_ufc_stats` dataset (GPL-3.0); it is downloaded at run
-time and not stored in this repo.
+time and not stored in this repo. Historical betting odds (the benchmark the models are measured against) come from
+`shortlikeafox/ultimate_ufc_dataset` (Apache-2.0), also downloaded at run time; only five of its columns are read.
 
 Design, table schemas and the plan: [`docs/design.md`](docs/design.md). The 2018 class project that
 started this repo is kept in [`legacy/2018/`](legacy/2018/) for history only; nothing here uses it.

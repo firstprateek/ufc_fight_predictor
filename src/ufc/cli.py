@@ -13,7 +13,42 @@ from .backtest import LeakSuspected, run_backtest
 from .backtest.run import default_out_dir
 from .build import build
 from .features import PhysicalNullError, build_features, check_physical, check_truncation
+from .odds import OddsError, build_odds, validate_odds
 from .validate import ValidationError, load_tables, validate
+
+
+def _build_odds(raw: Path, processed: Path, overrides: Path) -> None:
+    snap = fetch_mod.latest_odds_snapshot(raw)
+    if snap is None:
+        (processed / "odds.parquet").unlink(missing_ok=True)  # never leave a stale table
+        print("odds: no odds snapshot (run `ufc fetch`); odds.parquet not built")
+        return
+    odds, rep = build_odds(snap, load_tables(processed), overrides / "odds_names.csv")
+    odds.to_parquet(processed / "odds.parquet", index=False)
+    print(f"odds snapshot {snap.name}")
+    print(
+        f"odds source rows: {rep.source_total}; without usable odds: {rep.source_without_odds}; "
+        f"matched fallback pass: {rep.matched_by_fallback}"
+    )
+    print(f"odds: {len(odds)} rows")
+    print("year | source rows | with odds | matched | dropped (overround) | unmatched")
+    for y, c in rep.per_year.items():
+        print(
+            f"{y} | {c['source']} | {c['with_odds']} | {c['matched']} | {c['dropped']} | {c['unmatched']}"
+        )
+    print(
+        f"scored fights (decided, from 2015-01-01) with odds: "
+        f"{rep.scored_with_odds} of {rep.scored_fights} "
+        f"({rep.scored_with_odds / max(rep.scored_fights, 1):.1%})"
+    )
+    for title, lines in (
+        ("unmatched odds rows", rep.unmatched),
+        ("ambiguous odds rows (not matched)", rep.ambiguous),
+        ("dropped for overround outside range", rep.dropped_overround),
+    ):
+        print(f"{title}: {len(lines)}")
+        for line in lines:
+            print(f"  {line}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     f = sub.add_parser("fetch", help="download the source CSVs")
     f.add_argument("--sha", help="upstream commit to fetch (default: latest on main)")
+    f.add_argument("--odds-sha", help="odds dataset commit to fetch (default: latest on main)")
     sub.add_parser("build", help="build and validate the Parquet tables")
     sub.add_parser("validate", help="validate the built tables")
     ft = sub.add_parser("features", help="build point-in-time features.parquet")
@@ -43,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "fetch":
             snap = fetch_mod.fetch(raw, args.sha)
             print(f"snapshot {snap.name} in {snap}")
+            osnap = fetch_mod.fetch_odds(raw, args.odds_sha)
+            print(f"odds snapshot {osnap.name} in {osnap}")
         elif args.cmd == "build":
             snap = fetch_mod.latest_snapshot(raw)
             rep = build(snap, processed, args.overrides)
@@ -62,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             print("unresolved fighter names: 0")
             print("validation passed")
+            _build_odds(raw, processed, args.overrides)
         elif args.cmd == "features":
             t = load_tables(processed)
             feats = build_features(t["fights"], t["fight_stats_round"], t["fighters"])
@@ -106,7 +145,12 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"validation passed; fights without round stats: {rep['fights_without_round_stats']}"
             )
-    except (ValidationError, FileNotFoundError, PhysicalNullError) as e:
+            if (processed / "odds.parquet").exists():
+                validate_odds(
+                    pd.read_parquet(processed / "odds.parquet"), load_tables(processed)["fights"]
+                )
+                print("odds validation passed")
+    except (ValidationError, FileNotFoundError, PhysicalNullError, OddsError) as e:
         print(e, file=sys.stderr)
         return 1
     return 0
