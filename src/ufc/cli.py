@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import fetch as fetch_mod
 from .build import build
+from .features import build_features, check_truncation
 from .validate import ValidationError, load_tables, validate
 
 
@@ -20,6 +21,13 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--sha", help="upstream commit to fetch (default: latest on main)")
     sub.add_parser("build", help="build and validate the Parquet tables")
     sub.add_parser("validate", help="validate the built tables")
+    ft = sub.add_parser("features", help="build point-in-time features.parquet")
+    ft.add_argument(
+        "--check",
+        action="store_true",
+        help="also verify truncation invariance on a random sample of fights",
+    )
+    ft.add_argument("--sample", type=int, default=200, help="fights to check with --check")
     args = ap.parse_args(argv)
     raw, processed = args.data_dir / "raw", args.data_dir / "processed"
 
@@ -46,6 +54,20 @@ def main(argv: list[str] | None = None) -> int:
             )
             print("unresolved fighter names: 0")
             print("validation passed")
+        elif args.cmd == "features":
+            t = load_tables(processed)
+            feats = build_features(t["fights"], t["fight_stats_round"], t["fighters"])
+            feats.to_parquet(processed / "features.parquet", index=False)
+            print(f"features: {len(feats)} rows, {feats.shape[1]} columns")
+            if args.check:
+                bad = check_truncation(
+                    t["fights"], t["fight_stats_round"], t["fighters"], feats, args.sample
+                )
+                if bad:
+                    print(f"LEAK: truncation check failed for fights {bad}", file=sys.stderr)
+                    return 1
+                n = min(args.sample, len(feats))
+                print(f"truncation invariance holds on {n} sampled fights")
         else:
             rep = validate(load_tables(processed))
             print(
