@@ -30,8 +30,8 @@ src/ufc/            package (CLI entry point: `ufc`)
   parse.py          raw cells -> typed values (pure functions)
   build.py          source CSVs -> validated Parquet tables
   validate.py       table validation
-  features/         point-in-time features        (milestone 2)
-  backtest/         walk-forward evaluation       (milestone 2)
+  features/         point-in-time features
+  backtest/         walk-forward evaluation       (milestone 2, part 2)
 overrides/          committed manual fixes for the build (fighter ids, dropped fights)
 tests/              pytest, offline, uses small hand-made CSV fixtures
 data/raw/           source snapshots              (gitignored)
@@ -94,11 +94,56 @@ Validation (fails loudly): unique ids; `fights` row count equals source fights m
 `winner_id` is one of the two or null; round stats exist for both fighters for rounds 1..`end_round`
 (older fights may lack round stats: report the count, don't fail); landed <= attempted; dates parse.
 
-## Milestone 2: features and backtest (not started)
+## Milestone 2: features and backtest
 
-Point-in-time feature builder, walk-forward backtest, baselines (coin flip, Elo, logistic regression on
-rating and physical differences, gradient-boosted trees), metrics (log loss, Brier, accuracy,
-calibration), one report per run.
+Built in two parts: point-in-time features (below), then the walk-forward backtest and report.
+
+### Features (`src/ufc/features/`, `ufc features [--check]` -> `data/processed/features.parquet`)
+
+One row per fight: `fight_id`, `event_id`, `date`, `fighter_1_id`, `fighter_2_id`, then per-fighter
+columns prefixed `f1_` / `f2_` and `diff_` columns (= f1 minus f2). No label is stored; the backtest
+joins `fights`. Target (later): `p_f1`, the probability that `fighter_1_id` wins; only `outcome ==
+"win"` fights are trained on and scored. Draws and no contests still count as fights in history.
+
+**Point-in-time rule.** Fights are processed one date at a time. Every fight of a date is featurised
+from the state before that date, then the state is updated. So a fight sees only fights dated strictly
+earlier; same-day earlier bouts (old tournament nights) are ignored on purpose. `fighters` is a current
+snapshot: only `height_cm`, `reach_cm`, `stance` and `dob` are used from it. Known limitation: these
+are today's values, so a reach or stance changed after a fight is not seen as it was then, and the
+truncation guard (which truncates fights and stats, not the snapshot) cannot detect that. Also,
+`reach_cm` is null for most fights before about 2010 and almost none after 2018, so its missingness
+proxies the era.
+
+Features (each exists as `f1_x`, `f2_x`, `diff_x` unless noted):
+
+- Experience: `n_fights`, `n_wins`, `n_losses`, `win_rate` (wins / prior fights, draws and no contests
+  in the denominator), `win_streak`, `loss_streak` (a draw or no contest ends both), `days_since_last`,
+  `ko_win_share`, `sub_win_share` (of wins), `ko_loss_share` (of losses). Method mapping: `KO/TKO` and
+  `TKO - Doctor's Stoppage` are KO; `Submission` is submission; everything else (decisions, DQ, could not
+  continue, overturned, other) is neither.
+- Physical: `age` (years at fight date from `dob`), `height_cm`, `reach_cm`, `stance` (strings, no diff)
+  and `southpaw` (1.0 / 0.0, null if stance unknown).
+- Rates, each as `x_career` (ratio of sums over all prior fights with the stat) and `x_ewm`
+  (exponentially weighted, **half-life 3 fights**: the most recent prior fight has weight 1, the one
+  before 0.5^(1/3), and so on): `slpm`, `sapm` (significant strikes landed / absorbed per minute),
+  `str_acc`, `str_def`, `td15` (takedowns landed per 15 min), `td_acc`, `td_def`, `sub15`, `kd15`,
+  `kda15` (knockdowns scored / suffered per 15 min), `ctrl_share`, `ctrled_share` (share of fight time
+  in control / being controlled). Duration = (end_round - 1) x 300 + end_time_s seconds (assumes
+  5-minute rounds, so the ~180 early fights with 1 or 2 scheduled rounds get inexact per-minute rates). A fight
+  without round stats for both fighters, or without an end time, adds nothing to the rates but still
+  counts for experience. A rate is null when its denominator is 0 (for example takedown accuracy
+  with no attempts).
+- Elo: `elo`, one rating per fighter, start 1500, **K = 32**, standard 400-point logistic expectation.
+  Updated fight by fight in date order; a win scores 1, a draw 0.5, a no contest does not update.
+  Fights on one date all use the pre-date ratings. A debutant has rating 1500 (it is the definition of
+  the rating, not a missing value).
+- A fighter with no prior fights has `n_fights` 0 and nulls for every other history feature
+  (`n_wins`, `n_losses` included), never 0. A diff is null if either side is null.
+
+Leak guard: `ufc features --check` rebuilds the features for a random sample of 200 real fights with
+every fight dated on or after them removed from the inputs (the fight itself kept) and requires an
+identical row (`--seed` changes the sample); it exits non-zero otherwise. It cannot see a dependence on
+the fight's own result or stats (the fight is kept), which has its own unit test. The same property is a unit test on fixtures.
 
 ## Later
 
