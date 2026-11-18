@@ -25,7 +25,11 @@ The 2018 class project is kept under `legacy/2018/` for history only. Nothing in
    stance, height or date of birth is filled in depends on how long they lasted in the UFC, so its
    missingness reveals the future. It must never be a model input: no missing flags, no nulls the
    model can branch on. The physical fields are imputed with static rules that use no fight results
-   (see Features), and `ufc features` fails if any physical column holds a null. Evidence (found in
+   (see Features), and `ufc features` fails if any physical column holds a null. Imputing is not
+   enough: an imputed value is a recognisable constant, and a model can learn "this exact value
+   means the fighter did not last". So a model never sees a label next to a filled-in value: fights
+   where either fighter has any filled-in field (`snapshot_imputed`) are left out of training (the
+   flag itself is never a model input) but are still predicted and scored. Evidence (found in
    milestone 2, measured on decided fights where exactly one fighter has the value; the share is how
    often the fighter with the value won):
 
@@ -147,9 +151,11 @@ Features (each exists as `f1_x`, `f2_x`, `diff_x` unless noted):
   `ufc features` exits non-zero if any physical column (per fighter or diff) contains a null. The
   leak check reuses the constants fitted on the full tables. The constants and each fighter's
   division use fight dates and divisions of all fights, including later ones (no results), which
-  the truncation check cannot see. Known limitation: an imputed value is a constant, so a tree can
-  still isolate the exact imputed age (and reach = imputed height x ratio); residual signal of this
-  kind is not yet measured or removed.
+  the truncation check cannot see. Each row also has `f1_snapshot_imputed` and `f2_snapshot_imputed`
+  (boolean; true when any of that fighter's height, reach, stance or dob was filled in). They are
+  bookkeeping for the backtest and never model inputs (`feature_columns` excludes them). An imputed
+  value is a constant, so on its own it still marks the fighter who did not last; the backtest
+  therefore keeps those fights out of training (below).
 - Rates, each as `x_career` (ratio of sums over all prior fights with the stat) and `x_ewm`
   (exponentially weighted, **half-life 3 fights**: the most recent prior fight has weight 1, the one
   before 0.5^(1/3), and so on): `slpm`, `sapm` (significant strikes landed / absorbed per minute),
@@ -186,9 +192,18 @@ Models (hyperparameters fixed in `backtest/models.py`, never tuned on the test p
    `diff_n_fights`, `diff_win_rate` and the striking differential (`diff_slpm_career - diff_sapm_career`);
    train-set median imputation with missing flags, then standard scaling. The physical inputs are never
    null, so no flag can encode snapshot missingness; flags remain only for history features (debutants).
+   Fit only on fights without a `snapshot_imputed` flag (see below).
 4. `hgb`: scikit-learn `HistGradientBoostingClassifier` (200 iterations, learning rate 0.05, max depth
    3, min 40 samples per leaf, L2 1.0, no early stopping, seed 0) on every numeric `f1_`/`f2_`/`diff_`
-   column; nulls are handled natively. Columns with fewer than two distinct training values are dropped.
+   column except the `snapshot_imputed` flags; nulls are handled natively. Columns with fewer than two
+   distinct training values are dropped. Also fit only on unflagged fights.
+
+Snapshot exclusion: a fight where either fighter has a `snapshot_imputed` flag is never in a
+training set (`logreg` and `hgb`; Elo is untouched), in either orientation, and the flags are never in
+a feature matrix; the run fails (`LeakSuspected`) if either happens. Flagged fights in the test period
+are still predicted and scored, with the neutral imputed values, and the report shows how many fights
+are excluded from training (overall and in the last fold) and the scores on flagged versus unflagged
+scored fights.
 
 Symmetry: fitted models train on each fight in both orientations (`swap_orientation`: f1/f2 swapped,
 label flipped, diffs negated) and predict `p = (p(f1,f2) + 1 - p(f2,f1)) / 2`.
