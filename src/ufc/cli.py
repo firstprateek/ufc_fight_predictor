@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
 
 from . import fetch as fetch_mod
+from . import predict as predict_mod
 from .backtest import LeakSuspected, run_backtest
 from .backtest.ablation import ablation_markdown, run_ablation
 from .backtest.protocol import DEV_END, FINAL_FEATURE_SET, HOLDOUT_START, ProtocolError
@@ -62,6 +64,48 @@ def _build_odds(raw: Path, processed: Path, overrides: Path) -> None:
             print(f"  {line}")
 
 
+def _predict(args, raw: Path, processed: Path) -> None:
+    if args.card:
+        if args.fighters or any(
+            [args.weight_class, args.rounds, args.title, args.odds, args.id_1, args.id_2]
+        ):
+            raise predict_mod.PredictError(
+                "with --card, put fighters and bout details in the file (only --date, --json "
+                "and --log go with it)"
+            )
+        requests = predict_mod.load_card(args.card)
+        if args.date:
+            requests = [r if r.date else replace(r, date=args.date) for r in requests]
+    else:
+        if len(args.fighters) != 2:
+            raise predict_mod.PredictError(
+                'give two fighter names, or --card FILE: ufc predict "A" "B"'
+            )
+        requests = [
+            predict_mod.Request(
+                *args.fighters,
+                id1=args.id_1,
+                id2=args.id_2,
+                date=args.date,
+                weight_class=args.weight_class,
+                rounds=args.rounds,
+                title=args.title,
+                odds=tuple(args.odds) if args.odds else None,
+            )
+        ]
+    t = load_tables(processed)
+    try:
+        snap = fetch_mod.latest_snapshot(raw).name
+    except FileNotFoundError:
+        snap = "unknown"
+    doc = predict_mod.run(requests, t, snap)
+    print(predict_mod.to_json(doc) if args.json else predict_mod.render(doc))
+    if args.log:
+        log = raw.parent.parent / predict_mod.LOG_PATH  # next to the data directory
+        n = predict_mod.append_log(log, doc)
+        print(f"logged {n} fight(s) to {log}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="ufc")
     ap.add_argument("--data-dir", type=Path, default=Path("data"))
@@ -111,6 +155,27 @@ def main(argv: list[str] | None = None) -> int:
         help="run every feature set on the development period and apply the decision rule",
     )
     bt.add_argument("--reports-dir", type=Path, default=Path("reports"))
+    pr = sub.add_parser(
+        "predict",
+        help="win probability for a fight that has not happened yet",
+        description="Predict named fights from the built tables. Names are matched ignoring case "
+        "and accents; the fight uses only fights dated before --date.",
+    )
+    pr.add_argument("fighters", nargs="*", metavar="FIGHTER", help="two names, as typed")
+    pr.add_argument("--card", type=Path, help="CSV of fights (see examples/card.csv)")
+    pr.add_argument(
+        "--date", help="fight date YYYY-MM-DD (default: today; with --card, the default)"
+    )
+    pr.add_argument("--weight-class", help="default: the class both fighters last fought in")
+    pr.add_argument("--rounds", type=int, choices=(3, 5), help="scheduled rounds (default 3)")
+    pr.add_argument("--title", action="store_true", help="title fight (implies 5 rounds)")
+    pr.add_argument(
+        "--odds", nargs=2, type=float, metavar=("PRICE_1", "PRICE_2"), help="American prices"
+    )
+    pr.add_argument("--id-1", help="fighter_id of the first name, if the name is shared")
+    pr.add_argument("--id-2", help="fighter_id of the second name, if the name is shared")
+    pr.add_argument("--json", action="store_true", help="print one JSON document")
+    pr.add_argument("--log", action="store_true", help=f"append to {predict_mod.LOG_PATH}")
     args = ap.parse_args(argv)
     raw, processed = args.data_dir / "raw", args.data_dir / "processed"
 
@@ -205,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(f"DIFFERS from the committed constants: {RATING_PARAMS}", file=sys.stderr)
                 return 1
+        elif args.cmd == "predict":
+            _predict(args, raw, processed)
         elif args.cmd == "backtest":
             t = load_tables(processed)
             feats = pd.read_parquet(processed / "features.parquet")
@@ -281,6 +348,7 @@ def main(argv: list[str] | None = None) -> int:
         ProtocolError,
         TuneCutoffError,
         UnknownFeatureSet,
+        predict_mod.PredictError,
     ) as e:
         print(e, file=sys.stderr)
         return 1

@@ -395,6 +395,82 @@ A stack that beats the market with an interval below zero would mean `hgb` carri
 lacks; an interval including zero means no evidence of that. This is a diagnostic, not a model for
 betting: no return-on-investment simulation is done.
 
+## Milestone 4: predicting an upcoming fight
+
+`ufc predict` gives a win probability for a fight that has not happened. The source data holds
+completed fights only and there is no upcoming-card source, so the person running the command names the
+fights. Out of scope here: fetching cards or live odds, scoring the log (below), method and round
+prediction, anything that changes the features, the models, their hyperparameters or the frozen
+configuration.
+
+```
+ufc predict "Fighter A" "Fighter B" [--date YYYY-MM-DD] [--weight-class NAME] [--rounds 3|5] [--title]
+            [--odds PRICE_A PRICE_B] [--id-1 ID] [--id-2 ID] [--json] [--log]
+ufc predict --card card.csv [--date YYYY-MM-DD] [--json] [--log]
+```
+
+A card file has `fighter_1,fighter_2` and optionally `fighter_1_id,fighter_2_id,date,weight_class,
+scheduled_rounds,is_title,odds_1,odds_2` (a blank cell means the default); `examples/card.csv` is a small
+example of real past pairings. With `--card`, the bout details live in the file; `--date` is the default
+for rows without one.
+
+**Same code path as training.** A proposed fight is appended to the `fights` table as a row with no
+result (null `outcome` and `winner_id`) and no stats rows, and `build_features` featurises it with the
+rest. `build_features` featurises a result-less row from the state before its date and then skips it when
+the state is updated, so it moves no rating and no history and changes no other fight's row (a test
+compares every other row byte for byte, with and without the appended rows, including fights dated
+after it). The imputation constants are fitted on the real tables and passed in, so appended rows cannot
+move them. Several fights on one card are appended together; each is featurised from the state before
+the date, as same-date fights already are. There is no second feature implementation.
+
+**Point in time.** `--date` defaults to today. Fights dated on or after it are dropped before the
+features are built, and the models train on the decided fights before it (`backtest.models.fit_predict`,
+the one function that fits `hgb` and the logistic regression for both the backtest and `predict`: same
+hyperparameters, both orientations, snapshot-imputed fights left out, and the guards inside the models)
+with the frozen feature set. `predict` also runs the backtest's other guards: `swap_orientation` is an
+involution, training dates precede the cutoff, and swapping the fighters gives `1 - p` for `hgb` and the
+logistic regression (a second fit, so a call takes a little longer). A date earlier than some fights in
+the data is allowed and ignores them. As in the training build, the imputation constants and the
+`fighters` snapshot (principle 6, "Known limitation" under Features) come from the full tables, so a
+backdated `--date` is point in time for results and history but not for those; this is what makes the
+replay test exact. A warning is added when fewer than 1,000 fights are available to train on. The headline is
+`blend`; `--json` also has the `hgb` and logistic-regression probabilities. Internally
+`fighter_1_id < fighter_2_id`; the output follows the order the names were typed.
+
+**Replay test.** For a past fight X in quarter Q, predicting X's pairing on X's date with the training
+cutoff at the start of Q (an internal argument, `train_before`; the CLI always trains up to the date)
+must equal the walk-forward prediction for X to 1e-9 for `hgb`, logistic regression and `blend`. The
+test runs on synthetic data; on the real data it was checked for 20 random fights of 2025 (see the PR).
+
+**Names and defaults.** Names match ignoring case, accents and extra spaces. An unknown name fails with
+the closest names and a reminder that `ufc fetch && ufc build` refreshes the data; a name shared by
+several fighters fails listing each one's `fighter_id`, UFC record, last fight and weight class, and
+`--id-1` / `--id-2` (`fighter_1_id` / `fighter_2_id` in a card) choose; nothing is guessed. A fighter with
+no UFC fight is allowed (note: UFC debut). The same fighter on both sides is an error. Weight class: the
+class both fighters last fought in when it is the same, otherwise required. Rounds 3; `--title` means 5
+(and is an error with `--rounds 3`). Gender comes from the fighters' past fights, else the weight class.
+The class, rounds and title flag are inputs of the feature set (`ctx_*`), but with the current frozen
+model they did not change the probability in a check on 30 fights (the fitted `hgb` does not split on
+them and the logistic regression does not take them), so they describe the bout rather than move the
+number; this is the model's behaviour, not something `predict` adds.
+
+**Output.** Per fight: the names, date, class and rounds; the `blend` probability and its fair American
+price for each fighter; the inputs side by side (UFC record, prior fights, last fight and days since, age,
+reach, Elo, Glicko); notes (UFC debut, fewer than 3 prior UFC fights, a filled-in physical field, a layoff
+over 730 days). With `--odds` it adds the market probability with the margin removed
+(`odds.remove_margin`), the model's, and the difference, and states that over 5,179 past fights the
+market's log loss was 0.6092 against 0.6474 for this model, so the market is the better estimate when
+they disagree. It never prints advice, a stake or a "value" label. The footer gives the data snapshot sha,
+the date of the latest fight, the number of fights trained on, and a warning when the latest fight is more
+than 14 days before `--date`.
+
+**Log.** `--log` appends one row per fight to `predictions/log.csv` next to the data directory (gitignored); rows are only appended,
+and a file with another header is refused, never rewritten. Columns: `run_utc`, `data_snapshot`,
+`code_commit` (`-dirty` if `git status` shows any change, tracked or not), `fighter_1_id`, `fighter_1_name`,
+`fighter_2_id`, `fighter_2_name`, `date`, `weight_class`, `scheduled_rounds`, `is_title`, `p_blend_1`,
+`p_hgb_1`, `p_logreg_1` (all for the first-typed fighter) and `odds_1`, `odds_2` (empty when not given).
+Scoring the log against results is not built.
+
 ## Results of the ratings task
 
 See `docs/results/ratings.md` (generated by `ufc ratings-report`; the hand-written reading is

@@ -66,6 +66,13 @@ def implied_prob(american) -> float:
     return 100.0 / (o + 100.0) if o > 0 else -o / (-o + 100.0)
 
 
+def remove_margin(american_1, american_2) -> tuple[float, float, float]:
+    """Two American prices -> (p1, p2, overround): the implied probabilities scaled to sum to 1, the
+    same rule `make_odds_table` applies to the historical odds."""
+    q1, q2 = implied_prob(american_1), implied_prob(american_2)
+    return q1 / (q1 + q2), q2 / (q1 + q2), q1 + q2
+
+
 def load_aliases(path: Path | None) -> dict[str, str]:
     """odds-file name -> our fighter name (normalised), from the committed overrides file."""
     if path is None or not path.exists():

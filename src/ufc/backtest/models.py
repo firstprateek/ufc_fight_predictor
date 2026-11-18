@@ -179,6 +179,16 @@ def models_for(groups: tuple[str, ...] = ()) -> dict:
     }
 
 
+def fit_predict(train, y, test, groups: tuple[str, ...] = ()) -> dict[str, np.ndarray]:
+    """Fit `hgb` and logistic regression on `train` and predict `test`: the one place the headline
+    models are fitted, shared by the walk-forward backtest and `ufc predict`. Returns the probability
+    that fighter 1 wins under `hgb`, `logreg` and `blend`."""
+    models = models_for(groups)
+    p_hgb = models["hgb"](train, y, test)
+    p_logreg = models["logreg"](train, y, test)
+    return {"hgb": p_hgb, "logreg": p_logreg, "blend": blend(p_hgb, p_logreg)}
+
+
 def blend(p_hgb, p_logreg) -> np.ndarray:
     """`blend`: the mean of the logits of `hgb` and logistic regression. Swapping the fighters gives
     1 - p, as for both inputs."""
