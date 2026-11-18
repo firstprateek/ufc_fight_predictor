@@ -189,6 +189,72 @@ Features (each exists as `f1_x`, `f2_x`, `diff_x` unless noted):
 - A fighter with no prior fights has `n_fights` 0 and nulls for every other history feature
   (`n_wins`, `n_losses` included), never 0. A diff is null if either side is null.
 
+### Feature groups (`ratings`, `adjusted`, `context`)
+
+Added on top of the features above; all point in time (same-date rule: every fight of a date is
+featurised from the state before the date, updates apply after it) and each exists as `f1_`, `f2_`
+and `diff_` columns. A debutant's rating is the defined prior (like Elo's 1500), never a null. The
+tuned constants live in `features/params.py`; `ufc tune-ratings --before 2015-01-01` re-derives them
+(see "Tuning" below).
+
+**`ratings`**
+
+- Glicko-1 (`glicko_r`, `glicko_rd`, and the pair feature `glicko_exp`, the expected score). Each date
+  is a rating period. A debutant has rating 1500 and deviation 350. Between fights the deviation grows
+  as `rd = min(350, sqrt(rd_after_last_fight^2 + c^2 x days))`; `c` is tuned. `glicko_exp` uses
+  Glicko's `g` of the root-sum-square of both deviations. A no contest changes nothing and does not
+  restart the clock.
+- Method-weighted Elo (`welo`): like `elo`, but each update is `K x m(method) x (score - expected)`.
+  `m` is 1 for split and majority decisions and tuned for unanimous decisions, KO/TKO (with doctor's
+  stoppage), submissions and everything else (DQ, overturned, could not continue, other); `K` is tuned.
+  A draw uses its method's multiplier too; a no contest moves nothing. The multiplier grid starts at 0,
+  and the tuned value for the "other" endings is 0 (they do not move the rating). Plain `elo` stays
+  (K = 32).
+
+**`adjusted`** (opponent-adjusted performance). Five dimensions, each measured per fight from round
+stats as an output of the fighter: `slpm` (significant strikes landed per minute), `td15` (takedowns
+landed per 15 minutes), `ctrl_share` (share of fight time in control), `kd15` (knockdowns per 15
+minutes) and `sub15` (submission attempts per 15 minutes). Per dimension a fighter has an offence and a
+defence rating in standard-deviation units, starting at 0. The model of A's value against B is
+`league mean + sd x (offence_A - defence_B) + noise` (a high defence suppresses the opponent). After each
+date, each observation with error `e = (value - mean) / sd - (offence_A - defence_B)` moves
+`offence_A += rate_A x e` and `defence_B -= rate_B x e`, where
+`rate = max(rate_min, 1 / (fights_with_stats + k0))` per fighter. Mean and sd are the running mean and
+standard deviation of every observation before the date; until a dimension has 30 observations
+nothing is updated (the sd would mean nothing); the per-fighter fight count `fights_with_stats` still
+ counts those early fights. Fights without round stats update nothing. Columns:
+`adj_<dim>_off`, `adj_<dim>_def` and the pair feature `adj_<dim>_exp` (the expected value in the
+dimension's own units, `mean + sd x (own offence - opponent defence)`); `diff_adj_<dim>_exp` is the
+expected differential.
+
+**`context`** (all `ctx_*`). Strength of schedule from the plain Elo each opponent had before that
+fight: `sos_mean` (prior opponents), `sos_win_mean` and `best_win_elo` (opponents beaten), `last_opp_elo`,
+`last_result` (+1 win, -1 loss, 0 draw or no contest), `last_finish` (1 if the last fight ended in a
+KO/TKO or submission), `elo_change3` (Elo now minus Elo before the last three fights, or fewer if
+fewer), `elo_peak_gap` (highest Elo after any fight, at least 1500, minus now). Activity and
+setting: `fights_24m` (prior fights in the last 730 days), `wc_fights` (prior fights in this weight
+class), `wc_first` (1 if none), `wc_move` (-1, 0 or +1: this division's weight limit against the last
+fight in a ranked division; null for catch weight, open weight, tournaments or no prior fight),
+`five_round_fights`, `title_fights` (prior), and for this fight `is_five_rounds` and `is_title`
+(announced before the fight; equal for both fighters, so their diffs are 0, except that
+`is_five_rounds` is null for the 31 fights with no scheduled-rounds value). History features are
+null for debutants; counts are 0.
+
+The announced facts of the fight itself (division, scheduled rounds, title) reach the trackers
+through a `Card`; the outcome and the fight's own stats only reach them after the date.
+
+### Tuning (`ufc tune-ratings --before 2015-01-01`)
+
+Rating hyperparameters are tuned only on fights dated before 2015-01-01 (the start of the test period).
+Each candidate is scored by its one-step-ahead error on fights from 2005-01-01 to the cutoff (every
+fight is predicted from the state before its date, then the state updates; earlier fights warm the
+ratings up). Glicko `c`: grid search on log loss of the expected score. Method-weighted Elo: coordinate
+descent over `K` and the four multipliers on log loss. Adjusted model: grid search over `k0` and
+`rate_min` on the mean over the five dimensions of the standardised squared error. The grids are in
+`features/tune.py`; the search is deterministic. The command refuses a cutoff later than 2015-01-01,
+fights dated on or after the cutoff never reach the tuner (tested by corrupting them), and it exits
+non-zero if the result differs from the committed constants.
+
 Leak guard: `ufc features --check` rebuilds the features for a random sample of 200 real fights with
 every fight dated on or after them removed from the inputs (the fight itself kept) and requires an
 identical row (`--seed` changes the sample); it exits non-zero otherwise. It cannot see a dependence on

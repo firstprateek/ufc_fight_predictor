@@ -20,23 +20,11 @@ from ufc.features import (
 )
 
 
-def with_group_columns(feats, seed=5):
-    """Add fake columns for every group (the real ones come from the feature builders)."""
-    rng = np.random.default_rng(seed)
-    out = feats.copy()
-    names = ["glicko_r", "welo", *[f"adj_{d}_exp" for d in DIMENSIONS], "ctx_sos_mean"]
-    for n in names:
-        a = rng.normal(0, 1, len(out))
-        out[f"f1_{n}"], out[f"f2_{n}"] = a, rng.normal(0, 1, len(out))
-        out[f"diff_{n}"] = out[f"f1_{n}"] - out[f"f2_{n}"]
-    return out
-
-
 @pytest.fixture(scope="module")
 def data():
     fights, fighters = synthetic(1100)
     stats = pd.DataFrame(columns=["fight_id", "fighter_id", "round"])
-    feats = with_group_columns(build_features(fights, stats, fighters))
+    feats = build_features(fights, stats, fighters)
     return fights, feats
 
 
@@ -61,9 +49,8 @@ def test_feature_columns_by_set(data):
     base = feature_columns(feats, ())
     assert not any(column_group(c) != "base" for c in base)
     r = feature_columns(feats, ("ratings",))
-    assert set(r) - set(base) == {
-        f"{p}_{n}" for p in ("f1", "f2", "diff") for n in ("glicko_r", "welo")
-    }
+    assert {"f1_glicko_r", "diff_glicko_rd", "diff_welo", "f2_glicko_exp"} <= set(r) - set(base)
+    assert not any(column_group(c) in ("adjusted", "context") for c in r)
     assert set(feature_columns(feats, ("ratings", "adjusted", "context"))) == set(
         feature_columns(feats)
     )
@@ -187,7 +174,7 @@ def test_labels_of_flagged_fights_never_train_a_larger_set():
     fights, fighters = synthetic(1000)
     fighters.loc[fighters.fighter_id.isin(["f00", "f01", "f02"]), "reach_cm"] = None
     stats = pd.DataFrame(columns=["fight_id", "fighter_id", "round"])
-    feats = with_group_columns(build_features(fights, stats, fighters))
+    feats = build_features(fights, stats, fighters)
     s = scored_fights(feats, fights)
     flipped = s.copy()
     hit = BM.flagged(flipped) & (flipped.date < "2016-01-01")
@@ -257,9 +244,6 @@ def test_cli_refuses_an_unfrozen_set_past_development(tmp_path, capsys):
     args = ["--data-dir", str(tmp_path), "backtest", "--reports-dir", str(tmp_path / "rep")]
     assert main([*args, "--features-set", "all"]) == 1
     assert "not frozen" in capsys.readouterr().err
-    # on the development period the set is allowed, but the columns must exist
-    assert main([*args, "--features-set", "ratings", "--end", "2022-12-31"]) == 1
-    assert "rebuild with `ufc features`" in capsys.readouterr().err
     assert main([*args, "--features-set", "nonsense", "--end", "2022-12-31"]) == 1
     assert "unknown feature set" in capsys.readouterr().err
 

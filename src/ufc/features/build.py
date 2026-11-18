@@ -19,7 +19,12 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
+from .adjusted import Adjusted
+from .bout import Bout, Card, dimension_values, method_category, scheduled
+from .context import Context
 from .groups import in_set
+from .params import RATING_PARAMS, RatingParams
+from .ratings import Glicko, MethodElo
 
 ELO_START = 1500.0
 ELO_K = 32.0
@@ -299,10 +304,13 @@ def build_features(
     stats: pd.DataFrame,
     fighters: pd.DataFrame,
     imputation: Imputation | None = None,
+    params: RatingParams = RATING_PARAMS,
 ) -> pd.DataFrame:
     """One row per fight: KEYS, `f1_*`, `f2_*` and `diff_*` (= f1 minus f2) columns.
-    `imputation` defaults to constants fitted on `fights` and `fighters`."""
+    `imputation` defaults to constants fitted on `fights` and `fighters`; `params` are the tuned
+    rating constants."""
     imp = imputation or fit_imputation(fights, fighters)
+    trackers = [Glicko(params.glicko_c), MethodElo(params), Adjusted(params), Context()]
     fights = fights.sort_values(["date", "event_id", "bout_order"], kind="stable")
     totals = _fight_totals(stats)
     static = fighters.set_index("fighter_id").to_dict("index")
@@ -314,18 +322,36 @@ def build_features(
         on = date.fromisoformat(day)
         recs = group.to_dict("records")
         pre_elo = {}
+        cards = {}
         for r in recs:  # 1. features from the state before this date
             row = {k: r[k] for k in KEYS}
             parts = {}
+            card = Card(
+                r["fight_id"],
+                r["fighter_1_id"],
+                r["fighter_2_id"],
+                r["weight_class"],
+                scheduled(r.get("scheduled_rounds")),
+                bool(r.get("is_title", False)),
+                elo[r["fighter_1_id"]],
+                elo[r["fighter_2_id"]],
+            )
+            cards[r["fight_id"]] = card
             for side, fid in (("f1", r["fighter_1_id"]), ("f2", r["fighter_2_id"])):
                 f = {
                     **_history_features(history[fid], on),
                     **_static_features(fid, static.get(fid), on, imp),
                 }
                 f["elo"] = elo[fid]
+                for t in trackers:
+                    f.update(t.features(fid, on, card))
                 row[f"{side}_{FLAG}"] = f.pop(FLAG)
                 parts[side] = f
                 row.update({f"{side}_{k}": v for k, v in f.items()})
+            for t in trackers:
+                for k, (v1, v2) in t.pair(card, on).items():
+                    parts["f1"][k], parts["f2"][k] = v1, v2
+                    row[f"f1_{k}"], row[f"f2_{k}"] = v1, v2
             for k in parts["f1"]:
                 if k == "stance":
                     continue
@@ -333,7 +359,7 @@ def build_features(
                 row[f"diff_{k}"] = np.nan if a is None or b is None else a - b
             rows.append(row)
             pre_elo[r["fight_id"]] = (elo[r["fighter_1_id"]], elo[r["fighter_2_id"]])
-        new_hist, delta = [], defaultdict(float)
+        new_hist, delta, bouts = [], defaultdict(float), []
         for r in recs:  # 2. update the state with this date's fights
             f1, f2 = r["fighter_1_id"], r["fighter_2_id"]
             if r["outcome"] == "win":
@@ -356,12 +382,24 @@ def build_features(
             m1 = _metrics(a, b, dur) if a and b else {}
             m2 = _metrics(b, a, dur) if a and b else {}
             method = _method_class(r["method"])
+            bouts.append(
+                Bout(
+                    cards[r["fight_id"]],
+                    on,
+                    s1,
+                    method_category(r["method"]),
+                    dimension_values(m1),
+                    dimension_values(m2),
+                )
+            )
             new_hist.append((f1, {"date": on, "result": res1, "method": method, "metrics": m1}))
             new_hist.append((f2, {"date": on, "result": res2, "method": method, "metrics": m2}))
         for fid, h in new_hist:
             history[fid].append(h)
         for fid, d in delta.items():
             elo[fid] += d
+        for t in trackers:
+            t.update(on, bouts, elo)
 
     df = pd.DataFrame(rows)
     ints = [c for c in df.columns if c.endswith(("n_fights", "n_wins", "n_losses"))]
