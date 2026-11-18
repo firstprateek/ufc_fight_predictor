@@ -19,6 +19,8 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
+from .groups import in_set
+
 ELO_START = 1500.0
 ELO_K = 32.0
 # Exponentially weighted rates: a prior fight's weight halves for every 3 fights further back
@@ -270,11 +272,13 @@ def _elo_expected(r1: float, r2: float) -> float:
     return 1.0 / (1.0 + 10.0 ** ((r2 - r1) / 400.0))
 
 
-def feature_columns(df: pd.DataFrame) -> list[str]:
+def feature_columns(df: pd.DataFrame, groups: tuple[str, ...] | None = None) -> list[str]:
     """Numeric model inputs: every f1_/f2_/diff_ column except the stance strings and the
-    snapshot_imputed flags (which must never reach a model)."""
+    snapshot_imputed flags (which must never reach a model). `groups` (the groups on besides
+    `base`) restricts the columns to a feature set; None keeps every column."""
     skip = ("f1_stance", "f2_stance", f"f1_{FLAG}", f"f2_{FLAG}")
-    return [c for c in df.columns if c.startswith(("f1_", "f2_", "diff_")) and c not in skip]
+    cols = [c for c in df.columns if c.startswith(("f1_", "f2_", "diff_")) and c not in skip]
+    return cols if groups is None else [c for c in cols if in_set(c, groups)]
 
 
 def swap_orientation(df: pd.DataFrame) -> pd.DataFrame:

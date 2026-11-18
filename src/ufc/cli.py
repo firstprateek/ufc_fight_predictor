@@ -10,9 +10,17 @@ import pandas as pd
 
 from . import fetch as fetch_mod
 from .backtest import LeakSuspected, run_backtest
-from .backtest.run import default_out_dir
+from .backtest.ablation import ablation_markdown, run_ablation
+from .backtest.protocol import FINAL_FEATURE_SET, ProtocolError
+from .backtest.run import default_out_dir, scored_fights
 from .build import build
-from .features import PhysicalNullError, build_features, check_physical, check_truncation
+from .features import (
+    PhysicalNullError,
+    UnknownFeatureSet,
+    build_features,
+    check_physical,
+    check_truncation,
+)
 from .odds import OddsError, build_odds, validate_odds
 from .validate import ValidationError, load_tables, validate
 
@@ -71,6 +79,20 @@ def main(argv: list[str] | None = None) -> int:
     ft.add_argument("--seed", type=int, default=0, help="sampling seed for --check")
     bt = sub.add_parser("backtest", help="walk-forward backtest and report")
     bt.add_argument("--start", default="2015-01-01", help="first day of the test period")
+    bt.add_argument(
+        "--end", help="last day of the test period (development ends 2022-12-31, see design.md)"
+    )
+    bt.add_argument(
+        "--features-set",
+        default=None,
+        help="feature set: base, ratings, adjusted, context, all, or a join such as "
+        "ratings+adjusted (default: the frozen configuration, else base)",
+    )
+    bt.add_argument(
+        "--ablation",
+        action="store_true",
+        help="run every feature set on the development period and apply the decision rule",
+    )
     bt.add_argument("--reports-dir", type=Path, default=Path("reports"))
     args = ap.parse_args(argv)
     raw, processed = args.data_dir / "raw", args.data_dir / "processed"
@@ -130,9 +152,26 @@ def main(argv: list[str] | None = None) -> int:
             except FileNotFoundError:
                 snap = "unknown"
             out = default_out_dir(args.reports_dir, snap)
+            fset = args.features_set or FINAL_FEATURE_SET or "base"
             cmd = "uv run ufc backtest" + (
                 f" --start {args.start}" if args.start != "2015-01-01" else ""
             )
+            cmd += f" --end {args.end}" if args.end else ""
+            cmd += f" --features-set {args.features_set}" if args.features_set else ""
+            if args.ablation:
+                if args.end or args.features_set or args.start != "2015-01-01":
+                    raise ProtocolError(
+                        "--ablation runs every feature set on the fixed development period; "
+                        "do not combine it with --start, --end or --features-set"
+                    )
+                scored = scored_fights(feats, t["fights"])
+                preds = run_ablation(scored)
+                md, kept = ablation_markdown(preds)
+                out.mkdir(parents=True, exist_ok=True)
+                (out / "ablation.md").write_text(md + "\n")
+                print(md)
+                print(f"report in {out}")
+                return 0
             odds_path = processed / "odds.parquet"
             odds = pd.read_parquet(odds_path) if odds_path.exists() else None
             osnap = fetch_mod.latest_odds_snapshot(raw)
@@ -148,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
                     cmd,
                     odds,
                     osnap.name if osnap else "unknown",
+                    fset,
+                    args.end,
                 )
             except LeakSuspected as e:
                 print(f"LEAK LIKELY: {e} (report written to {out})", file=sys.stderr)
@@ -164,7 +205,14 @@ def main(argv: list[str] | None = None) -> int:
                     pd.read_parquet(processed / "odds.parquet"), load_tables(processed)["fights"]
                 )
                 print("odds validation passed")
-    except (ValidationError, FileNotFoundError, PhysicalNullError, OddsError) as e:
+    except (
+        ValidationError,
+        FileNotFoundError,
+        PhysicalNullError,
+        OddsError,
+        ProtocolError,
+        UnknownFeatureSet,
+    ) as e:
         print(e, file=sys.stderr)
         return 1
     return 0

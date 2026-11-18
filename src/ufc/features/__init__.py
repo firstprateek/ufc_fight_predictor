@@ -14,8 +14,30 @@ from .build import (
     fit_imputation,
     swap_orientation,
 )
+from .groups import (
+    BASE,
+    DIMENSIONS,
+    GROUPS,
+    LOGREG_EXTRA,
+    SET_NAMES,
+    UnknownFeatureSet,
+    check_columns,
+    column_group,
+    parse_feature_set,
+    set_name,
+)
 
 __all__ = [
+    "BASE",
+    "DIMENSIONS",
+    "GROUPS",
+    "LOGREG_EXTRA",
+    "SET_NAMES",
+    "UnknownFeatureSet",
+    "check_columns",
+    "column_group",
+    "parse_feature_set",
+    "set_name",
     "FLAG",
     "ELO_K",
     "ELO_START",

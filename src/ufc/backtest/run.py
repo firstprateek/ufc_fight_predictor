@@ -8,10 +8,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ..features import swap_orientation
+from ..features import check_columns, parse_feature_set, set_name, swap_orientation
 from . import market as MK
 from . import metrics as M
-from .models import MODELS, LeakSuspected, flagged
+from .models import LeakSuspected, blend, flagged, model_names, models_for
+from .protocol import check_run
 
 TRIPWIRE_ACCURACY = 0.75
 BOOTSTRAP_DRAWS = 1000
@@ -31,10 +32,20 @@ def _quarter_start(d: str) -> str:
 
 
 def walk_forward(
-    scored: pd.DataFrame, start: str, odds: pd.DataFrame | None = None
+    scored: pd.DataFrame,
+    start: str,
+    odds: pd.DataFrame | None = None,
+    groups: tuple[str, ...] = (),
+    end: str | None = None,
 ) -> pd.DataFrame:
-    """For each calendar quarter from `start`, fit every model on scored fights dated before the
-    quarter starts and predict the quarter. Returns one row per test fight with a p_<model> column."""
+    """For each calendar quarter from `start` to `end` (default: the latest fight), fit every model
+    on scored fights dated before the quarter starts and predict the quarter. `groups` is the
+    feature set (the groups on besides base). Returns one row per test fight with a p_<model>
+    column, including `p_blend`. Fights after `end` are dropped first, so nothing after it can
+    influence a result."""
+    if end is not None:
+        scored = scored[scored.date <= end]
+    models = models_for(groups)
     qstart = scored.date.map(_quarter_start)
     out = []
     for q in sorted(set(qstart[scored.date >= start])):
@@ -47,13 +58,14 @@ def walk_forward(
         sw = swap_orientation(test)
         if not swap_orientation(sw).equals(test):
             raise LeakSuspected("swap_orientation is not an involution")
-        for name, model in MODELS.items():
+        for name, model in models.items():
             p = model(train, train.y.to_numpy(), test)
             part[f"p_{name}"] = p
             if name in ("logreg", "hgb"):  # orientation guard: swapping the fighters gives 1 - p
                 p_swapped = model(train, train.y.to_numpy(), sw)
                 if not np.allclose(p + p_swapped, 1.0, atol=1e-9):
                     raise LeakSuspected(f"{name}: swapping fighters did not give 1 - p")
+        part["p_blend"] = blend(part["p_hgb"], part["p_logreg"])
         if odds is not None:  # the market column goes on the result only, never into a model input
             part = MK.add_market(part, odds)
         out.append(part)
@@ -83,7 +95,7 @@ HEADER = ["model", "fights", "log loss", "Brier", "accuracy", "ECE"]
 
 def summary_markdown(pred: pd.DataFrame) -> tuple[str, dict]:
     """The overall table, bootstrap intervals and calibration of the best model."""
-    names = list(MODELS)
+    names = model_names(pred)
     overall = {m: M.summarize(pred[f"p_{m}"], pred.y) for m in names}
     best = min(names, key=lambda m: overall[m]["log_loss"])
     md = ["### Overall", "", _table([[m, *_fmt(overall[m])] for m in names], HEADER), ""]
@@ -147,21 +159,23 @@ def _train_lines(pred, info) -> list[str]:
 
 
 def report_markdown(
-    pred, start, snapshot, command, features_rows, train_info=None
+    pred, start, snapshot, command, features_rows, train_info=None, features_set="base", end=None
 ) -> tuple[str, dict]:
     summary, overall = summary_markdown(pred)
     pred = pred.assign(year=pred.date.str[:4])
     rows = []
     for y, g in pred.groupby("year"):
-        for m in MODELS:
+        for m in model_names(pred):
             rows.append([y, m, *_fmt(M.summarize(g[f"p_{m}"], g.y))])
     head = [
         "# Baseline backtest",
         "",
         f"- snapshot: `{snapshot}`",
         f"- command: `{command}`",
-        f"- test period: {pred.date.min()} to {pred.date.max()} (start {start}), "
-        f"{len(pred)} scored fights (win outcomes only), {pred.event_id.nunique()} events",
+        f"- test period: {pred.date.min()} to {pred.date.max()} (start {start}"
+        + (f", end {end}" if end else "")
+        + f"), {len(pred)} scored fights (win outcomes only), {pred.event_id.nunique()} events",
+        f"- feature set: `{features_set}`",
         f"- features rows: {features_rows}",
         "- each quarter: fit on all scored fights dated before the quarter, predict the quarter",
         "- ECE: 10 equal-width bins, each fight counted from both fighters' views",
@@ -193,10 +207,18 @@ def run_backtest(
     command: str = "uv run ufc backtest",
     odds: pd.DataFrame | None = None,
     odds_snapshot: str = "unknown",
+    features_set: str = "base",
+    end: str | None = None,
 ) -> dict:
-    """Run the walk-forward backtest, write the report, and enforce the leak tripwire."""
+    """Run the walk-forward backtest, write the report, and enforce the leak tripwire. The protocol
+    (`check_run`) refuses a feature set that is not frozen past the development period."""
+    check_run(features_set, end)
+    groups = parse_feature_set(features_set)
+    check_columns(features, groups)
     scored = scored_fights(features, fights)
-    pred = walk_forward(scored, start, odds)
+    if end is not None:
+        scored = scored[scored.date <= end].reset_index(drop=True)
+    pred = walk_forward(scored, start, odds, groups, end)
     last_q = pred.quarter.max()
     train_last = scored[scored.date < last_q]
     info = {
@@ -206,7 +228,9 @@ def run_backtest(
         "train_last": len(train_last),
         "excluded_last": int(flagged(train_last).sum()),
     }
-    md, overall = report_markdown(pred, start, snapshot, command, len(features), info)
+    md, overall = report_markdown(
+        pred, start, snapshot, command, len(features), info, set_name(groups), end
+    )
     market_md = None
     if odds is not None:
         market_md = MK.market_markdown(pred, len(pred))

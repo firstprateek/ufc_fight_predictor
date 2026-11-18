@@ -12,6 +12,7 @@ uv run ufc build      # build data/processed/*.parquet (including odds.parquet) 
 uv run ufc validate   # re-run validation on the built tables
 uv run ufc features --check   # point-in-time features.parquet, plus the leak check (about 2 min)
 uv run ufc backtest   # walk-forward backtest incl. the market benchmark; report in reports/, summaries in docs/results/baseline.md and docs/results/market.md
+uv run ufc backtest --end 2022-12-31 --features-set base   # development period only; --ablation runs every feature set there
 uv run pytest         # offline tests
 ```
 
